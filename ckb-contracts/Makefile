@@ -6,7 +6,7 @@ CFLAGS := -fPIC -O3 -nostdinc -nostdlib -nostartfiles -fvisibility=hidden -I dep
 LDFLAGS := -Wl,-static -fdata-sections -ffunction-sections -Wl,--gc-sections
 SECP256K1_SRC := deps/secp256k1/src/ecmult_static_pre_context.h
 MOLC := moleculec
-MOLC_VERSION := 0.4.1
+MOLC_VERSION := 0.6.0
 PROTOCOL_HEADER := build/blockchain.h
 PROTOCOL_SCHEMA := build/blockchain.mol
 PROTOCOL_VERSION := d75e4c56ffa40e17fd2fe477da3f98c5578edcd1
