@@ -1,0 +1,32 @@
+{
+  "name": "axon-demo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "demo": "node src/demo.js",
+    "clean": "rm -rf build/*.{json,js,ts}"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Keith-CY/molecule-javascript-template.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Keith-CY/molecule-javascript-template/issues"
+  },
+  "homepage": "https://github.com/Keith-CY/molecule-javascript-template#readme",
+  "dependencies": {
+    "@nervosnetwork/ckb-sdk-core": "^0.30.0",
+    "ckb-js-toolkit": "^0.9.1",
+    "crc32": "^0.2.2",
+    "jsbi": "^3.1.2",
+    "lodash": "^4.17.15",
+    "molecule-javascript": "0.1.5"
+  },
+  "devDependencies": {
+    "rollup": "^1.32.0"
+  }
+}
