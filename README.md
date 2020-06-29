@@ -1,2 +1,2 @@
-# Layer 2 Sidechain Solution for Nervos Network
+# Layer 2 Sidechain Solutions for Nervos Network
 

@@ -1,0 +1,6 @@
+[submodule "ckb-contracts/deps/secp256k1"]
+	path = ckb-contracts/deps/secp256k1
+	url = https://github.com/nervosnetwork/secp256k1
+[submodule "ckb-contracts/deps/ckb-c-stdlib"]
+	path = ckb-contracts/deps/ckb-c-stdlib
+	url = https://github.com/nervosnetwork/ckb-c-stdlib
