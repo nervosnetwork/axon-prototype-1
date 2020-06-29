@@ -1,7 +1,7 @@
 #include "blake2b.h"
 #include "blockchain.h"
 #include "ckb_syscalls.h"
-#include "crosschain.h"
+#include "centralized_crosschain.h"
 #include "secp256k1_helper.h"
 
 #define BLAKE2B_BLOCK_SIZE 32
