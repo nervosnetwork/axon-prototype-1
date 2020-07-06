@@ -1,0 +1,5 @@
+deployment = "deployment.toml"
+
+[[contracts]]
+name = "centralized-crosschain"
+template_type = "Rust"
