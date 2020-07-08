@@ -1,4 +1,5 @@
 use super::*;
+
 use ckb_testtool::{builtin::ALWAYS_SUCCESS, context::Context};
 use ckb_tool::ckb_types::{
     bytes::Bytes,
@@ -6,22 +7,32 @@ use ckb_tool::ckb_types::{
     packed::*,
     prelude::*,
 };
-use ckb_tool::{ckb_error::assert_error_eq, ckb_script::ScriptError};
+use ckb_tool::{
+    ckb_hash,
+    ckb_error::assert_error_eq,
+    ckb_script::ScriptError,
+};
+use secp256k1::{SecretKey, PublicKey};
 
-const MAX_CYCLES: u64 = 100_0000;
+const MAX_CYCLES: u64 = 10000_0000;
 
 // errors
 const ERROR_AMOUNT: i8 = 5;
 
-fn build_test_context(
-    inputs_token: Vec<u128>,
+use utils::{
+    gen_witness,
+    gen_crosschain_data,
+};
+
+fn build_test_init_context(
+    _inputs_token: Vec<u128>,
     outputs_token: Vec<u128>,
-    is_owner_mode: bool,
+    is_init_mode: bool,
 ) -> (Context, TransactionView) {
-    // deploy my-sudt script
+    // deploy cross typescript
     let mut context = Context::default();
-    let sudt_bin: Bytes = Loader::default().load_binary("my-sudt");
-    let sudt_out_point = context.deploy_contract(sudt_bin);
+    let cross_type_bin: Bytes = Loader::default().load_binary("centralized-crosschain");
+    let cross_type_out_point = context.deploy_contract(cross_type_bin);
     // deploy always_success script
     let always_success_out_point = context.deploy_contract(ALWAYS_SUCCESS.clone());
 
@@ -33,52 +44,51 @@ fn build_test_context(
         .out_point(always_success_out_point)
         .build();
 
-    // build sudt script
-    let sudt_script_args: Bytes = if is_owner_mode {
-        // use always_success script hash as owner's lock
-        let lock_hash: [u8; 32] = lock_script.calc_script_hash().unpack();
-        lock_hash.to_vec().into()
+    // prepare inputs
+    let input_ckb = Capacity::bytes(1000).unwrap().as_u64();
+    let input_out_point = context.create_cell(
+        CellOutput::new_builder()
+            .capacity(input_ckb.pack())
+            .lock(lock_script.clone())
+            .build(),
+        Bytes::new(),
+    );
+    let input = CellInput::new_builder()
+        .previous_output(input_out_point)
+        .build();
+
+    let inputs = vec![input];
+
+
+    // build cross typescript
+    let cross_typescript_args: Bytes = if is_init_mode {
+        // use tx.input[0].outpoint as args
+        inputs[0].previous_output().as_bytes()
     } else {
         // use zero hash as owner's lock which implies we can never enter owner mode
         [0u8; 32].to_vec().into()
     };
 
-    let sudt_script = context
-        .build_script(&sudt_out_point, sudt_script_args)
-        .expect("script");
-    let sudt_script_dep = CellDep::new_builder().out_point(sudt_out_point).build();
+    println!("cross_typescript_args: {:?}", cross_typescript_args.to_vec());
+    println!("tx.inputs[0].outpoint: {:?}", inputs[0].previous_output().as_bytes().to_vec());
 
-    // prepare inputs
-    // assign 1000 Bytes to per input
-    let input_ckb = Capacity::bytes(1000).unwrap().as_u64();
-    let inputs = inputs_token.iter().map(|token| {
-        let input_out_point = context.create_cell(
-            CellOutput::new_builder()
-                .capacity(input_ckb.pack())
-                .lock(lock_script.clone())
-                .type_(Some(sudt_script.clone()).pack())
-                .build(),
-            token.to_le_bytes().to_vec().into(),
-        );
-        let input = CellInput::new_builder()
-            .previous_output(input_out_point)
-            .build();
-        input
-    });
+    let cross_typescript = context
+        .build_script(&cross_type_out_point, cross_typescript_args)
+        .expect("script");
+    let cross_type_script_dep = CellDep::new_builder().out_point(cross_type_out_point).build();
 
     // prepare outputs
-    let output_ckb = input_ckb * inputs_token.len() as u64 / outputs_token.len() as u64;
+    let output_ckb = input_ckb;
     let outputs = outputs_token.iter().map(|_token| {
         CellOutput::new_builder()
             .capacity(output_ckb.pack())
             .lock(lock_script.clone())
-            .type_(Some(sudt_script.clone()).pack())
+            .type_(Some(cross_typescript.clone()).pack())
             .build()
     });
-    let outputs_data: Vec<_> = outputs_token
-        .iter()
-        .map(|token| Bytes::from(token.to_le_bytes().to_vec()))
-        .collect();
+
+    let output_data = Bytes::new();
+    let outputs_data = vec![output_data];
 
     // build transaction
     let tx = TransactionBuilder::default()
@@ -86,14 +96,107 @@ fn build_test_context(
         .outputs(outputs)
         .outputs_data(outputs_data.pack())
         .cell_dep(lock_script_dep)
-        .cell_dep(sudt_script_dep)
+        .cell_dep(cross_type_script_dep)
+        .build();
+    (context, tx)
+}
+
+fn build_test_transfer_context(
+    _inputs_token: Vec<u128>,
+    outputs_token: Vec<u128>,
+) -> (Context, TransactionView) {
+    // deploy cross typescript
+    let mut context = Context::default();
+    let cross_type_bin: Bytes = Loader::default().load_binary("centralized-crosschain");
+    let cross_type_out_point = context.deploy_contract(cross_type_bin);
+    // deploy always_success script
+    let always_success_out_point = context.deploy_contract(ALWAYS_SUCCESS.clone());
+
+    // build lock script
+    let lock_script = context
+        .build_script(&always_success_out_point, Default::default())
+        .expect("script");
+    let lock_script_dep = CellDep::new_builder()
+        .out_point(always_success_out_point)
+        .build();
+
+
+    // build cross typescript
+    // let cross_typescript_args: Bytes = inputs[0].previous_output().as_bytes();
+    let cross_typescript_args: Bytes = [0u8; 32].to_vec().into();
+    let cross_typescript = context
+        .build_script(&cross_type_out_point, cross_typescript_args)
+        .expect("script");
+    let cross_type_script_dep = CellDep::new_builder().out_point(cross_type_out_point).build();
+
+
+    // prepare inputs
+    let crosschain_data = {
+        let privkey_bytes = hex::decode("d00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2b0").unwrap();
+        let secret_key = SecretKey::parse_slice(privkey_bytes.as_slice()).unwrap();
+        let secp_pubkey = PublicKey::from_secret_key(&secret_key);
+
+        let mut blake2b = ckb_hash::new_blake2b();
+        let mut pubkey_hash = [0u8; 32];
+        blake2b.update(secp_pubkey.serialize_compressed().to_vec().as_slice() );
+        blake2b.finalize(&mut pubkey_hash);
+
+        println!("pubkey_hash.len = {}", pubkey_hash.len());
+
+        let cc_data: Vec<u8> = gen_crosschain_data(&pubkey_hash.to_vec().as_slice()[0..20]).into();
+        Bytes::from(cc_data)
+    };
+
+    println!("crosschain_data: {:?}", crosschain_data.to_vec());
+
+    let input_ckb = Capacity::bytes(1000).unwrap().as_u64();
+    let input_out_point = context.create_cell(
+        CellOutput::new_builder()
+            .capacity(input_ckb.pack())
+            .lock(lock_script.clone())
+            .type_(Some(cross_typescript.clone()).pack())
+            .build(),
+        crosschain_data.clone(),
+    );
+
+    let input = CellInput::new_builder()
+        .previous_output(input_out_point)
+        .build();
+
+    let inputs = vec![input];
+
+
+    // prepare outputs
+    let output_ckb = input_ckb;
+    let outputs = outputs_token.iter().map(|_token| {
+        CellOutput::new_builder()
+            .capacity(output_ckb.pack())
+            .lock(lock_script.clone())
+            .type_(Some(cross_typescript.clone()).pack())
+            .build()
+    });
+
+    // prepare witness for WitnessArgs.InputType
+    let cc_witness: Vec<u8> = gen_witness().into();
+    let witness = WitnessArgs::new_builder()
+        .input_type(Some(Bytes::from(cc_witness)).pack())
+        .build();
+
+    // build transaction
+    let tx = TransactionBuilder::default()
+        .inputs(inputs)
+        .outputs(outputs)
+        .outputs_data(vec![crosschain_data].pack())
+        .witness(witness.as_bytes().pack())
+        .cell_dep(lock_script_dep)
+        .cell_dep(cross_type_script_dep)
         .build();
     (context, tx)
 }
 
 #[test]
-fn test_basic() {
-    let (mut context, tx) = build_test_context(vec![1000], vec![400, 600], false);
+fn test_init() {
+    let (mut context, tx) = build_test_init_context(vec![], vec![100], true);
     let tx = context.complete_tx(tx);
 
     // run
@@ -104,36 +207,15 @@ fn test_basic() {
 }
 
 #[test]
-fn test_destroy_udt() {
-    let (mut context, tx) = build_test_context(vec![1000], vec![800, 100, 50], false);
+fn test_transfer() {
+    let (mut context, tx) = build_test_transfer_context(vec![100], vec![100] );
     let tx = context.complete_tx(tx);
 
     // run
     let cycles = context
         .verify_tx(&tx, MAX_CYCLES)
         .expect("pass verification");
-    println!("cycles: {}", cycles);
-}
 
-#[test]
-fn test_create_sudt_without_owner_mode() {
-    let (mut context, tx) = build_test_context(vec![1000], vec![1200], false);
-    let tx = context.complete_tx(tx);
-
-    // run
-    let err = context.verify_tx(&tx, MAX_CYCLES).unwrap_err();
-    assert_error_eq!(err, ScriptError::ValidationFailure(ERROR_AMOUNT));
-}
-
-#[test]
-fn test_create_sudt_with_owner_mode() {
-    let (mut context, tx) = build_test_context(vec![1000], vec![1200], true);
-    let tx = context.complete_tx(tx);
-
-    // run
-    let cycles = context
-        .verify_tx(&tx, MAX_CYCLES)
-        .expect("pass verification");
-    println!("cycles: {}", cycles);
+    println!("tmp tx cycles: {}", cycles);
 }
 

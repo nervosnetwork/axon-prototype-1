@@ -23,8 +23,11 @@ use ckb_std::{
 };
 use types::{CrosschainData, CrosschainDataReader, CrosschainWitness, CrosschainWitnessReader};
 
-use blake2::{Blake2b, Digest};
+use blake2b_ref::{Blake2b, Blake2bBuilder};
+
 use secp256k1::{recover, Message, RecoveryId, Signature};
+
+const CKB_HASH_PERSONALIZATION: &[u8] = b"ckb-default-hash";
 
 entry!(entry);
 default_alloc!();
@@ -71,6 +74,12 @@ impl From<SysError> for Error {
     }
 }
 
+pub fn new_blake2b() -> Blake2b {
+    Blake2bBuilder::new(32)
+        .personal(CKB_HASH_PERSONALIZATION)
+        .build()
+}
+
 fn verify_init() -> Result<(), Error> {
     let script = load_script()?;
     let args: Bytes = script.args().unpack();
@@ -89,6 +98,8 @@ fn verify_transfer() -> Result<(), Error> {
      * First, ensures that the input capacity is not less than output capacity in
      * typescript groups for the input and output cells.
      */
+    debug!("begin verify_transfer");
+
     let inputs_capacity = QueryIter::new(load_cell, Source::GroupInput)
         .map(|cell| cell.capacity().unpack())
         .sum::<u64>();
@@ -99,38 +110,58 @@ fn verify_transfer() -> Result<(), Error> {
         return Err(Error::CapacityInvalid);
     }
 
+    debug!("after capacity cmp");
+
     // ensure data does not change
     let input_data_hash = load_cell_data_hash(0, Source::GroupInput)?;
     let output_data_hash = load_cell_data_hash(0, Source::GroupOutput)?;
+
+    debug!("input_data_hash: {:?}, output_data_hash: {:?}", input_data_hash, output_data_hash);
+
     if input_data_hash != output_data_hash {
         return Err(Error::OutDataInvalid);
     }
 
-    // verify signature
-    // let witness = load_witness_args()?;
+    debug!("before verify signature");
     let witness_args = load_witness_args(0, Source::Input)?.input_type();
     if witness_args.is_none() {
         return Err(Error::WitnessMissInputType);
     }
-    let witness_args = witness_args.to_opt().unwrap().as_bytes();
+    let witness_args: Bytes = witness_args.to_opt().unwrap().unpack();
 
-    if CrosschainWitnessReader::verify(&witness_args, false).is_err() {
+    debug!("witness_args: {:?}", &witness_args[..]);
+    debug!("before CrosschainWitnessReader::verify");
+    if CrosschainWitnessReader::verify(&witness_args, true).is_err() {
         return Err(Error::WitnessInvalidEncoding);
     }
     let crosschain_witness = CrosschainWitness::new_unchecked(witness_args.into());
     let messages = crosschain_witness.messages().as_bytes();
     let proof = crosschain_witness.proof();
 
+
+    debug!("proof: {:?}",proof);
+    debug!("before load_cell_data");
     let crosschain_data_raw = load_cell_data(0, Source::GroupInput)?;
+    debug!("crosschain_data_raw: {:?}", crosschain_data_raw);
+
+
     if CrosschainDataReader::verify(&crosschain_data_raw, false).is_err() {
         return Err(Error::CrosschainInputDataEncodingInvalid);
     }
     let crosschain_data = CrosschainData::new_unchecked(crosschain_data_raw.into());
     let pubkey_hash = crosschain_data.pubkey_hash().as_bytes();
 
-    let mut hasher = Blake2b::new();
-    hasher.update(messages.as_ref());
-    let message_hash = hasher.finalize();
+    debug!("pubkey_hash from crosschain_data: {:?}", pubkey_hash);
+
+    let mut blake2b = new_blake2b();
+    let mut message_hash = [0u8; 32];
+    blake2b.update(messages.as_ref() );
+    blake2b.finalize(&mut message_hash);
+
+
+    debug!("message_hash.len = {}", message_hash.len() );
+    debug!("before Signature parse_slice");
+
 
     let sig = Signature::parse_slice(&proof.as_slice()[0..64]).unwrap();
     let rec_id = RecoveryId::parse(proof.as_slice()[64]).unwrap();
@@ -139,14 +170,19 @@ fn verify_transfer() -> Result<(), Error> {
         .map_err(|_e| Error::InvalidSignature)?
         .serialize_compressed();
 
-    let mut hasher = Blake2b::new();
-    hasher.update(recover_pubkey.as_ref());
-    let recover_pubkey_hash = hasher.finalize();
+    let mut blake2b = new_blake2b();
+    let mut recover_pubkey_hash = [0u8; 32];
+    blake2b.update(recover_pubkey.as_ref());
+    blake2b.finalize(&mut recover_pubkey_hash);
 
-    if recover_pubkey_hash.as_ref() != pubkey_hash.as_ref() {
+
+    debug!("recover_pubkey_hash: {:?}", recover_pubkey_hash);
+
+    if &recover_pubkey_hash[0..20] != pubkey_hash.as_ref() {
         return Err(Error::PubkeyHashMismatch);
     }
 
+    debug!("sig verified");
     Ok(())
 }
 

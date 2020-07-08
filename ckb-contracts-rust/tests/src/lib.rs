@@ -1,3 +1,6 @@
+mod utils;
+mod types;
+
 use ckb_tool::ckb_types::bytes::Bytes;
 use std::env;
 use std::fs;
@@ -56,6 +59,7 @@ impl Loader {
     pub fn load_binary(&self, name: &str) -> Bytes {
         let mut path = self.0.clone();
         path.push(name);
+        println!("binary_path: {:?}", path);
         fs::read(path).expect("binary").into()
     }
 }

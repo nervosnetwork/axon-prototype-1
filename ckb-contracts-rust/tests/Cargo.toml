@@ -8,3 +8,7 @@ edition = "2018"
 [dependencies]
 ckb-tool = { git = "https://github.com/jjyr/ckb-tool.git", tag = "v0.0.1" }
 ckb-testtool = { git = "https://github.com/jjyr/ckb-tool.git", tag = "v0.0.1" }
+molecule = { version = "=0.6.0", default-features = false }
+hex = "0.4"
+libsecp256k1 = { version = "0.3.5", default-features = false }
+blake2 = { version = "0.9.0", default-features = false }
