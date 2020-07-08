@@ -13,7 +13,7 @@ use core::result::Result;
 // https://nervosnetwork.github.io/ckb-std/riscv64imac-unknown-none-elf/doc/ckb_std/index.html
 use ckb_std::{
     ckb_constants::Source,
-    ckb_types::prelude::*,
+    ckb_types::{bytes::Bytes, prelude::*},
     debug, default_alloc, entry,
     error::SysError,
     high_level::{
@@ -73,11 +73,11 @@ impl From<SysError> for Error {
 
 fn verify_init() -> Result<(), Error> {
     let script = load_script()?;
-    let args = script.args().as_bytes();
+    let args: Bytes = script.args().unpack();
 
-    let outpoint = load_input_out_point(0, Source::GroupInput)?.as_bytes();
+    let outpoint = load_input_out_point(0, Source::Input)?.as_bytes();
 
-    if args.as_ref() != outpoint.as_ref() {
+    if &args[..] != outpoint.as_ref() {
         Err(Error::ArgsInvalid)
     } else {
         Ok(())
@@ -154,6 +154,7 @@ fn main() -> Result<(), Error> {
     let input_group_num = QueryIter::new(load_cell, Source::GroupInput).count();
     let output_group_num = QueryIter::new(load_cell, Source::GroupOutput).count();
     debug!("input_group_num: {}", input_group_num);
+    debug!("output_group_num: {}", output_group_num);
 
     if output_group_num != 1 {
         return Err(Error::GroupOutputNotOne);
