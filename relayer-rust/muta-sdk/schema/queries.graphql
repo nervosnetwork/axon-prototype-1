@@ -1,0 +1,67 @@
+query RpcBlock($height: Uint64) {
+  getBlock(height: $height) {
+    header {
+      chainId
+      height
+      execHeight
+      preHash
+      timestamp
+      orderRoot
+      confirmRoot
+      stateRoot
+      receiptRoot
+      cyclesUsed
+      proposer
+      proof {
+        height
+        round
+        blockHash
+        signature
+        bitmap
+      }
+      validatorVersion
+      validators {
+        address
+        proposeWeight
+        voteWeight
+      }
+    }
+    orderedTxHashes
+    hash
+  }
+}
+
+query RpcTransaction($txHash: Hash!) {
+  getTransaction(txHash: $txHash) {
+    chainId
+    cyclesLimit
+    cyclesPrice
+    nonce
+    timeout
+    serviceName
+    method
+    payload
+    txHash
+    pubkey
+    signature
+  }
+}
+
+query RpcBlockHookReceipt($height: Uint64!) {
+  getBlockHookReceipt(height: $height) {
+    height
+    stateRoot
+    events {
+      service
+      topic
+      data
+    }
+  }
+}
+
+mutation SendTransaction(
+  $inputRaw: InputRawTransaction!
+  $inputEncryption: InputTransactionEncryption!
+) {
+  sendTransaction(inputRaw: $inputRaw, inputEncryption: $inputEncryption)
+}
