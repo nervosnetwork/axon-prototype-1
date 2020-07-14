@@ -12,9 +12,8 @@ use ckb_tool::{
     ckb_error::assert_error_eq,
     ckb_script::ScriptError,
 };
-use secp256k1::{SecretKey, PublicKey};
 
-const MAX_CYCLES: u64 = 10000_0000;
+const MAX_CYCLES: u64 = 1000_000_000;
 
 // errors
 const ERROR_AMOUNT: i8 = 5;
@@ -132,18 +131,15 @@ fn build_test_transfer_context(
 
     // prepare inputs
     let crosschain_data = {
-        let privkey_bytes = hex::decode("d00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2b0").unwrap();
-        let secret_key = SecretKey::parse_slice(privkey_bytes.as_slice()).unwrap();
-        let secp_pubkey = PublicKey::from_secret_key(&secret_key);
+        let secret_keys = vec![
+            "0000000000000000000000000000000000000000000000000000000000000001",
+            "0000000000000000000000000000000000000000000000000000000000000002",
+            "0000000000000000000000000000000000000000000000000000000000000003",
+            "0000000000000000000000000000000000000000000000000000000000000004",
+            "0000000000000000000000000000000000000000000000000000000000000005",
+        ];
 
-        let mut blake2b = ckb_hash::new_blake2b();
-        let mut pubkey_hash = [0u8; 32];
-        blake2b.update(secp_pubkey.serialize_compressed().to_vec().as_slice() );
-        blake2b.finalize(&mut pubkey_hash);
-
-        println!("pubkey_hash.len = {}", pubkey_hash.len());
-
-        let cc_data: Vec<u8> = gen_crosschain_data(&pubkey_hash.to_vec().as_slice()[0..20]).into();
+        let cc_data: Vec<u8> = gen_crosschain_data(secret_keys, 4u8).into();
         Bytes::from(cc_data)
     };
 
@@ -177,7 +173,14 @@ fn build_test_transfer_context(
     });
 
     // prepare witness for WitnessArgs.InputType
-    let cc_witness: Vec<u8> = gen_witness().into();
+    let cc_witness: Vec<u8> = gen_witness(vec![
+        "0000000000000000000000000000000000000000000000000000000000000001",
+        "0000000000000000000000000000000000000000000000000000000000000003",
+        "0000000000000000000000000000000000000000000000000000000000000004",
+        "0000000000000000000000000000000000000000000000000000000000000005",
+    ]).into();
+
+    println!("origin CrosschainWitness: {:?}", cc_witness.clone());
     let witness = WitnessArgs::new_builder()
         .input_type(Some(Bytes::from(cc_witness)).pack())
         .build();
@@ -208,7 +211,7 @@ fn test_init() {
 
 #[test]
 fn test_transfer() {
-    let (mut context, tx) = build_test_transfer_context(vec![100], vec![100] );
+    let (mut context, tx) = build_test_transfer_context(vec![100], vec![100]);
     let tx = context.complete_tx(tx);
 
     // run
