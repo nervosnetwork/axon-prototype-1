@@ -14,7 +14,7 @@ use core::result::Result;
 use ckb_std::{
     ckb_constants::Source,
     ckb_types::{bytes::Bytes, prelude::*},
-    debug, default_alloc, entry,
+    default_alloc, entry,
     error::SysError,
     high_level::{
         load_cell, load_cell_data, load_cell_data_hash, load_input_out_point, load_script,
@@ -22,12 +22,13 @@ use ckb_std::{
     },
 };
 use types::{CrosschainData, CrosschainDataReader, CrosschainWitness, CrosschainWitnessReader};
-
 use blake2b_ref::{Blake2b, Blake2bBuilder};
-
 use secp256k1::{recover, Message, RecoveryId, Signature};
+use crate::types::{Hashes, SignatureVec};
+use molecule::prelude::Byte;
 
 const CKB_HASH_PERSONALIZATION: &[u8] = b"ckb-default-hash";
+const MAX_VALIDATORS: usize = 16;
 
 entry!(entry);
 default_alloc!();
@@ -59,6 +60,9 @@ enum Error {
     CrosschainInputDataEncodingInvalid,
     InvalidSignature,
     PubkeyHashMismatch,
+    ValidatorsOverLimit,
+    SignaturesOverLimit,
+    MultisigNotVerified,
 }
 
 impl From<SysError> for Error {
@@ -98,8 +102,6 @@ fn verify_transfer() -> Result<(), Error> {
      * First, ensures that the input capacity is not less than output capacity in
      * typescript groups for the input and output cells.
      */
-    debug!("begin verify_transfer");
-
     let inputs_capacity = QueryIter::new(load_cell, Source::GroupInput)
         .map(|cell| cell.capacity().unpack())
         .sum::<u64>();
@@ -110,88 +112,84 @@ fn verify_transfer() -> Result<(), Error> {
         return Err(Error::CapacityInvalid);
     }
 
-    debug!("after capacity cmp");
-
     // ensure data does not change
     let input_data_hash = load_cell_data_hash(0, Source::GroupInput)?;
     let output_data_hash = load_cell_data_hash(0, Source::GroupOutput)?;
-
-    debug!("input_data_hash: {:?}, output_data_hash: {:?}", input_data_hash, output_data_hash);
-
     if input_data_hash != output_data_hash {
         return Err(Error::OutDataInvalid);
     }
 
-    debug!("before verify signature");
     let witness_args = load_witness_args(0, Source::Input)?.input_type();
     if witness_args.is_none() {
         return Err(Error::WitnessMissInputType);
     }
     let witness_args: Bytes = witness_args.to_opt().unwrap().unpack();
-
-    debug!("witness_args: {:?}", &witness_args[..]);
-    debug!("before CrosschainWitnessReader::verify");
     if CrosschainWitnessReader::verify(&witness_args, true).is_err() {
         return Err(Error::WitnessInvalidEncoding);
     }
+
     let crosschain_witness = CrosschainWitness::new_unchecked(witness_args.into());
     let messages = crosschain_witness.messages().as_bytes();
     let proof = crosschain_witness.proof();
 
-
-    debug!("proof: {:?}",proof);
-    debug!("before load_cell_data");
     let crosschain_data_raw = load_cell_data(0, Source::GroupInput)?;
-    debug!("crosschain_data_raw: {:?}", crosschain_data_raw);
-
-
-    if CrosschainDataReader::verify(&crosschain_data_raw, false).is_err() {
+    if CrosschainDataReader::verify(&crosschain_data_raw, true).is_err() {
         return Err(Error::CrosschainInputDataEncodingInvalid);
     }
     let crosschain_data = CrosschainData::new_unchecked(crosschain_data_raw.into());
-    let pubkey_hash = crosschain_data.pubkey_hash().as_bytes();
-
-    debug!("pubkey_hash from crosschain_data: {:?}", pubkey_hash);
+    let pubkey_hashes = crosschain_data.pubkey_hashes();
+    let threshold = crosschain_data.threshold();
 
     let mut blake2b = new_blake2b();
     let mut message_hash = [0u8; 32];
-    blake2b.update(messages.as_ref() );
+    blake2b.update(messages.as_ref());
     blake2b.finalize(&mut message_hash);
 
+    verify_multisig(&message_hash, &pubkey_hashes, threshold, proof)
+}
 
-    debug!("message_hash.len = {}", message_hash.len() );
-    debug!("before Signature parse_slice");
-
-
-    let sig = Signature::parse_slice(&proof.as_slice()[0..64]).unwrap();
-    let rec_id = RecoveryId::parse(proof.as_slice()[64]).unwrap();
-    let msg = Message::parse_slice(&message_hash).unwrap();
-    let recover_pubkey = recover(&msg, &sig, &rec_id)
-        .map_err(|_e| Error::InvalidSignature)?
-        .serialize_compressed();
-
-    let mut blake2b = new_blake2b();
-    let mut recover_pubkey_hash = [0u8; 32];
-    blake2b.update(recover_pubkey.as_ref());
-    blake2b.finalize(&mut recover_pubkey_hash);
-
-
-    debug!("recover_pubkey_hash: {:?}", recover_pubkey_hash);
-
-    if &recover_pubkey_hash[0..20] != pubkey_hash.as_ref() {
-        return Err(Error::PubkeyHashMismatch);
+fn verify_multisig(msg_hash: &[u8], pubkey_hashes: &Hashes, raw_threshold: Byte, proof: SignatureVec) -> Result<(), Error> {
+    let msg = Message::parse_slice(msg_hash).unwrap();
+    let threshold: u8 = raw_threshold.as_bytes()[0];
+    if pubkey_hashes.len() > MAX_VALIDATORS as usize {
+        return Err(Error::ValidatorsOverLimit);
+    }
+    if proof.len() > MAX_VALIDATORS as usize {
+        return Err(Error::SignaturesOverLimit);
     }
 
-    debug!("sig verified");
-    Ok(())
+    let mut has_verified = [false; MAX_VALIDATORS];
+    let mut sum_verified = 0u8;
+    for raw_sig in proof.into_iter() {
+        let sig = Signature::parse_slice(&raw_sig.as_slice()[0..64]).unwrap();
+        let rec_id = RecoveryId::parse(raw_sig.as_slice()[64]).unwrap();
+        let recover_pubkey = recover(&msg, &sig, &rec_id)
+            .map_err(|_e| Error::InvalidSignature)?
+            .serialize_compressed();
+
+        let mut blake2b = new_blake2b();
+        let mut recover_pubkey_hash = [0u8; 32];
+        blake2b.update(recover_pubkey.as_ref());
+        blake2b.finalize(&mut recover_pubkey_hash);
+
+        for (index, pk_hash) in pubkey_hashes.clone().into_iter().enumerate() {
+            if !has_verified[index] && &recover_pubkey_hash[0..20] == pk_hash.as_slice() {
+                has_verified[index] = true;
+                sum_verified += 1;
+                if sum_verified >= threshold {
+                    return Ok(());
+                };
+                break;
+            }
+        }
+    }
+
+    Err(Error::MultisigNotVerified)
 }
 
 fn main() -> Result<(), Error> {
     let input_group_num = QueryIter::new(load_cell, Source::GroupInput).count();
     let output_group_num = QueryIter::new(load_cell, Source::GroupOutput).count();
-    debug!("input_group_num: {}", input_group_num);
-    debug!("output_group_num: {}", output_group_num);
-
     if output_group_num != 1 {
         return Err(Error::GroupOutputNotOne);
     }
