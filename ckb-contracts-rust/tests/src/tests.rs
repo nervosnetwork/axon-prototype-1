@@ -35,11 +35,15 @@ fn build_test_init_context(
     // deploy always_success script
     let always_success_out_point = context.deploy_contract(ALWAYS_SUCCESS.clone());
 
-    // build lock script
-    let lock_script = context
+    // deploy lockscript script
+    let cross_lock_bin: Bytes = Loader::default().load_binary("lockscript");
+    let cross_lock_out_point = context.deploy_contract(cross_lock_bin);
+
+    // build always success lock script
+    let always_success_lock_script = context
         .build_script(&always_success_out_point, Default::default())
         .expect("script");
-    let lock_script_dep = CellDep::new_builder()
+    let always_success_script_dep = CellDep::new_builder()
         .out_point(always_success_out_point)
         .build();
 
@@ -48,7 +52,7 @@ fn build_test_init_context(
     let input_out_point = context.create_cell(
         CellOutput::new_builder()
             .capacity(input_ckb.pack())
-            .lock(lock_script.clone())
+            .lock(always_success_lock_script.clone())
             .build(),
         Bytes::new(),
     );
@@ -57,7 +61,6 @@ fn build_test_init_context(
         .build();
 
     let inputs = vec![input];
-
 
     // build cross typescript
     let cross_typescript_args: Bytes = if is_init_mode {
@@ -76,16 +79,25 @@ fn build_test_init_context(
         .expect("script");
     let cross_type_script_dep = CellDep::new_builder().out_point(cross_type_out_point).build();
 
+    // build crosschain lock script
+    let type_args: Byte32 = cross_typescript.calc_script_hash();
+    println!("typescript hash: {:?}", type_args.clone());
+    let cross_lock_script = context
+        .build_script(&cross_lock_out_point, type_args.as_bytes())
+        .expect("script");
+    let cross_lock_script_dep = CellDep::new_builder()
+        .out_point(cross_lock_out_point)
+        .build();
+
     // prepare outputs
     let output_ckb = input_ckb;
     let outputs = outputs_token.iter().map(|_token| {
         CellOutput::new_builder()
             .capacity(output_ckb.pack())
-            .lock(lock_script.clone())
+            .lock(cross_lock_script.clone())
             .type_(Some(cross_typescript.clone()).pack())
             .build()
     });
-
     let output_data = Bytes::new();
     let outputs_data = vec![output_data];
 
@@ -94,7 +106,8 @@ fn build_test_init_context(
         .inputs(inputs)
         .outputs(outputs)
         .outputs_data(outputs_data.pack())
-        .cell_dep(lock_script_dep)
+        .cell_dep(always_success_script_dep)
+        .cell_dep(cross_lock_script_dep)
         .cell_dep(cross_type_script_dep)
         .build();
     (context, tx)
@@ -108,17 +121,9 @@ fn build_test_transfer_context(
     let mut context = Context::default();
     let cross_type_bin: Bytes = Loader::default().load_binary("centralized-crosschain");
     let cross_type_out_point = context.deploy_contract(cross_type_bin);
-    // deploy always_success script
-    let always_success_out_point = context.deploy_contract(ALWAYS_SUCCESS.clone());
-
-    // build lock script
-    let lock_script = context
-        .build_script(&always_success_out_point, Default::default())
-        .expect("script");
-    let lock_script_dep = CellDep::new_builder()
-        .out_point(always_success_out_point)
-        .build();
-
+    // deploy lockscript script
+    let cross_lock_bin: Bytes = Loader::default().load_binary("lockscript");
+    let cross_lock_out_point = context.deploy_contract(cross_lock_bin);
 
     // build cross typescript
     // let cross_typescript_args: Bytes = inputs[0].previous_output().as_bytes();
@@ -127,6 +132,16 @@ fn build_test_transfer_context(
         .build_script(&cross_type_out_point, cross_typescript_args)
         .expect("script");
     let cross_type_script_dep = CellDep::new_builder().out_point(cross_type_out_point).build();
+
+    // build crosschain lock script
+    let type_args: Byte32 = cross_typescript.calc_script_hash();
+    println!("typescript hash: {:?}", type_args.clone().as_bytes().to_vec());
+    let cross_lock_script = context
+        .build_script(&cross_lock_out_point, type_args.as_bytes())
+        .expect("script");
+    let cross_lock_script_dep = CellDep::new_builder()
+        .out_point(cross_lock_out_point)
+        .build();
 
 
     // prepare inputs
@@ -149,7 +164,7 @@ fn build_test_transfer_context(
     let input_out_point = context.create_cell(
         CellOutput::new_builder()
             .capacity(input_ckb.pack())
-            .lock(lock_script.clone())
+            .lock(cross_lock_script.clone())
             .type_(Some(cross_typescript.clone()).pack())
             .build(),
         crosschain_data.clone(),
@@ -167,7 +182,7 @@ fn build_test_transfer_context(
     let outputs = outputs_token.iter().map(|_token| {
         CellOutput::new_builder()
             .capacity(output_ckb.pack())
-            .lock(lock_script.clone())
+            .lock(cross_lock_script.clone())
             .type_(Some(cross_typescript.clone()).pack())
             .build()
     });
@@ -191,7 +206,7 @@ fn build_test_transfer_context(
         .outputs(outputs)
         .outputs_data(vec![crosschain_data].pack())
         .witness(witness.as_bytes().pack())
-        .cell_dep(lock_script_dep)
+        .cell_dep(cross_lock_script_dep)
         .cell_dep(cross_type_script_dep)
         .build();
     (context, tx)
@@ -206,7 +221,7 @@ fn test_init() {
     let cycles = context
         .verify_tx(&tx, MAX_CYCLES)
         .expect("pass verification");
-    println!("cycles: {}", cycles);
+    println!("init tx cycles: {}", cycles);
 }
 
 #[test]
@@ -219,6 +234,6 @@ fn test_transfer() {
         .verify_tx(&tx, MAX_CYCLES)
         .expect("pass verification");
 
-    println!("tmp tx cycles: {}", cycles);
+    println!("transfer tx cycles: {}", cycles);
 }
 
