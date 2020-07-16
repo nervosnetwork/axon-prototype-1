@@ -124,7 +124,7 @@ fn verify_transfer() -> Result<(), Error> {
         return Err(Error::WitnessMissInputType);
     }
     let witness_args: Bytes = witness_args.to_opt().unwrap().unpack();
-    if CrosschainWitnessReader::verify(&witness_args, true).is_err() {
+    if CrosschainWitnessReader::verify(&witness_args, false).is_err() {
         return Err(Error::WitnessInvalidEncoding);
     }
 
@@ -133,7 +133,7 @@ fn verify_transfer() -> Result<(), Error> {
     let proof = crosschain_witness.proof();
 
     let crosschain_data_raw = load_cell_data(0, Source::GroupInput)?;
-    if CrosschainDataReader::verify(&crosschain_data_raw, true).is_err() {
+    if CrosschainDataReader::verify(&crosschain_data_raw, false).is_err() {
         return Err(Error::CrosschainInputDataEncodingInvalid);
     }
     let crosschain_data = CrosschainData::new_unchecked(crosschain_data_raw.into());
@@ -162,8 +162,11 @@ fn verify_multisig(msg_hash: &[u8], pubkey_hashes: &Hashes, raw_threshold: Byte,
     let mut sum_verified = 0u8;
     for raw_sig in proof.into_iter() {
         let sig = Signature::parse_slice(&raw_sig.as_slice()[0..64]).unwrap();
-        let rec_id = RecoveryId::parse(raw_sig.as_slice()[64]).unwrap();
-        let recover_pubkey = recover(&msg, &sig, &rec_id)
+        let rec_id = RecoveryId::parse(raw_sig.as_slice()[64]);
+        if rec_id.is_err() {
+            continue;
+        }
+        let recover_pubkey = recover(&msg, &sig, &rec_id.unwrap())
             .map_err(|_e| Error::InvalidSignature)?
             .serialize_compressed();
 

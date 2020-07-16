@@ -236,4 +236,3 @@ fn test_transfer() {
 
     dbg!("transfer tx", &cycles);
 }
-
