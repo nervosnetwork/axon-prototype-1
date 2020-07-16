@@ -141,7 +141,7 @@ fn build_test_transfer_context(
         blake2b.update(secp_pubkey.serialize_compressed().to_vec().as_slice() );
         blake2b.finalize(&mut pubkey_hash);
 
-        println!("pubkey_hash.len = {}", pubkey_hash.len());
+        dbg!( &pubkey_hash.len() );
 
         let cc_data: Vec<u8> = gen_crosschain_data(&pubkey_hash.to_vec().as_slice()[0..20]).into();
         Bytes::from(cc_data)
@@ -203,7 +203,7 @@ fn test_init() {
     let cycles = context
         .verify_tx(&tx, MAX_CYCLES)
         .expect("pass verification");
-    println!("cycles: {}", cycles);
+    dbg!("init tx", &cycles);
 }
 
 #[test]
@@ -216,6 +216,6 @@ fn test_transfer() {
         .verify_tx(&tx, MAX_CYCLES)
         .expect("pass verification");
 
-    println!("tmp tx cycles: {}", cycles);
+    dbg!("transfer tx", &cycles);
 }
 

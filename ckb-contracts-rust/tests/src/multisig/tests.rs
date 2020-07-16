@@ -221,7 +221,7 @@ fn test_init() {
     let cycles = context
         .verify_tx(&tx, MAX_CYCLES)
         .expect("pass verification");
-    println!("init tx cycles: {}", cycles);
+    dbg!("init tx", &cycles);
 }
 
 #[test]
@@ -234,6 +234,6 @@ fn test_transfer() {
         .verify_tx(&tx, MAX_CYCLES)
         .expect("pass verification");
 
-    println!("transfer tx cycles: {}", cycles);
+    dbg!("transfer tx", &cycles);
 }
 
