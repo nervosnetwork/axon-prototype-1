@@ -30,7 +30,7 @@ fn build_test_init_context(
 ) -> (Context, TransactionView) {
     // deploy cross typescript
     let mut context = Context::default();
-    let cross_type_bin: Bytes = Loader::default().load_binary("centralized-crosschain");
+    let cross_type_bin: Bytes = Loader::default().load_binary("multisig-crosschain");
     let cross_type_out_point = context.deploy_contract(cross_type_bin);
     // deploy always_success script
     let always_success_out_point = context.deploy_contract(ALWAYS_SUCCESS.clone());
@@ -119,7 +119,7 @@ fn build_test_transfer_context(
 ) -> (Context, TransactionView) {
     // deploy cross typescript
     let mut context = Context::default();
-    let cross_type_bin: Bytes = Loader::default().load_binary("centralized-crosschain");
+    let cross_type_bin: Bytes = Loader::default().load_binary("multisig-crosschain");
     let cross_type_out_point = context.deploy_contract(cross_type_bin);
     // deploy lockscript script
     let cross_lock_bin: Bytes = Loader::default().load_binary("lockscript");

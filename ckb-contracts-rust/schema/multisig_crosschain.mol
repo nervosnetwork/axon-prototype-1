@@ -21,14 +21,18 @@ table Message {
 }
 
 vector MessageVec <Message>;
+vector SignatureVec <Signature>;
 
 // witness data to unlock crosschain lock
 table CrosschainWitness {
 	messages:  MessageVec,
-	proof:  Signature,
+	proof:  SignatureVec,
 }
+
+vector Hashes <Hash>;
 
 // crosschain cell data
 table CrosschainData {
-	pubkey_hash: Hash,
+	pubkey_hashes: Hashes,
+	threshold: byte,
 }
