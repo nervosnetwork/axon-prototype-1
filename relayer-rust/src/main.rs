@@ -1,158 +1,53 @@
+mod config;
+mod ckb_server;
+mod muta_server;
+mod tests;
+
+use std::fs;
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Sender};
 use std::{thread, time::Duration};
 
 use anyhow::{anyhow, Result};
-use ckb_sdk::rpc::HttpRpcClient;
+use ckb_sdk::rpc::{HttpRpcClient, CellOutput};
 use ckb_types::packed;
 use muta_protocol::types as muta_types;
 use muta_sdk::rpc::client::HttpRpcClient as MutaClient;
 
-pub struct MutaListener {
-    url:           String,
-    interval:      u64,
-    latest_height: Option<u64>,
-}
+use ckb_handler::types::{CKBMessage, BatchMintSudt, MintSudt};
+use muta_protocol::{
+    fixed_codec::FixedCodec,
+    codec::ProtocolCodec,
+};
+use common_crypto::{
+    Crypto, PrivateKey, PublicKey, Secp256k1, Secp256k1PrivateKey, Secp256k1PublicKey,
+    Secp256k1Signature, Signature, ToPublicKey,
+};
+use muta_protocol::ProtocolResult;
+use std::convert::TryInto;
 
-impl MutaListener {
-    fn new(url: String, interval: u64) -> Self {
-        Self {
-            url,
-            interval,
-            latest_height: None,
-        }
-    }
 
-    fn start(mut self, sender: Sender<muta_types::BlockHookReceipt>) -> Result<()> {
-        let muta_client = MutaClient::new(self.url);
-        loop {
-            let latest_block = muta_client.get_block(None).unwrap();
-            let current_latest_height = latest_block.header.height;
-            if self.latest_height.is_none() {
-                let receipt = muta_client
-                    .get_block_hook_receipt(current_latest_height)
-                    .unwrap();
-                sender.send(receipt)?;
-            } else {
-                let latest = self.latest_height.unwrap();
-                for h in (latest + 1..=current_latest_height) {
-                    let receipt = muta_client.get_block_hook_receipt(h).unwrap();
-                    sender.send(receipt)?;
-                }
-            }
-            self.latest_height = Some(current_latest_height);
-            thread::sleep(Duration::from_secs(self.interval));
-        }
-    }
-}
+use ckb_types::packed::Script;
+use ckb_types::prelude::Entity;
+use ckb_crypto::secp::SECP256K1;
+use ckb_hash::blake2b_256;
+use ckb_jsonrpc_types as json_types;
+use ckb_types::{
+    core::{capacity_bytes, BlockView, Capacity, HeaderView},
+    h256,
+    packed::CellDep,
+};
+use ckb_server::{
+    util::{get_privkey_from_hex, gen_lock_hash, gen_tx},
+    listener::CkbListener,
+    handler::CkbHandler,
+};
+use muta_server::{
+    listener::MutaListener,
+    handler::MutaHandler,
+};
 
-pub struct CkbListener {
-    url:              String,
-    interval:         u64,
-    tip_block_number: Option<u64>,
-}
-
-impl CkbListener {
-    pub fn new(url: String, interval: u64) -> Self {
-        Self {
-            url,
-            interval,
-            tip_block_number: None,
-        }
-    }
-
-    pub fn start(mut self, sender: Sender<ckb_sdk::rpc::BlockView>) -> Result<()> {
-        let mut ckb_rpc_client = HttpRpcClient::new(self.url);
-        loop {
-            let tip_block_number = ckb_rpc_client.get_tip_block_number().unwrap();
-            if self.tip_block_number.is_none() {
-                let block = ckb_rpc_client
-                    .get_block_by_number(tip_block_number)
-                    .unwrap()
-                    .ok_or(anyhow!("empty block"))?;
-                sender.send(block)?;
-            } else {
-                let latest = self.tip_block_number.unwrap();
-                for h in (latest + 1..=tip_block_number) {
-                    let block = ckb_rpc_client
-                        .get_block_by_number(h)
-                        .unwrap()
-                        .ok_or(anyhow!("empty block"))?;
-                    sender.send(block)?;
-                }
-            }
-            self.tip_block_number = Some(tip_block_number);
-            thread::sleep(Duration::from_secs(self.interval));
-        }
-    }
-}
-
-pub struct CkbHandler {
-    // private key of relayer_pk, in hex format
-    relayer_pk:  String,
-    muta_client: MutaClient,
-}
-
-impl CkbHandler {
-    pub fn new(relayer_pk: String, muta_url: String) -> Self {
-        Self {
-            muta_client: MutaClient::new(muta_url),
-            relayer_pk,
-        }
-    }
-
-    fn transform(
-        &self,
-        ckb_block: &ckb_sdk::rpc::BlockView,
-    ) -> Result<Vec<muta_types::SignedTransaction>> {
-        // todo: parse ckb block, format txs send to muta
-        Ok(vec![])
-    }
-
-    pub fn handle(&self, ckb_block: ckb_sdk::rpc::BlockView) -> Result<()> {
-        // dbg!(ckb_block);
-        log::info!(
-            "handle ckb block @ height {:?}",
-            ckb_block.header.inner.number
-        );
-        let txs = self.transform(&ckb_block)?;
-        for tx in txs {
-            let hash = self.muta_client.send_transaction(tx).unwrap();
-            dbg!(&hash);
-        }
-        Ok(())
-    }
-}
-
-pub struct MutaHandler {
-    relayer_pk: String,
-    ckb_client: HttpRpcClient,
-}
-
-impl MutaHandler {
-    pub fn new(relayer_pk: String, ckb_url: String) -> Self {
-        Self {
-            relayer_pk,
-            ckb_client: HttpRpcClient::new(ckb_url),
-        }
-    }
-
-    fn transform(
-        &self,
-        muta_receipt: muta_types::BlockHookReceipt,
-    ) -> Result<Vec<packed::Transaction>> {
-        // todo: implement the transform logics
-        Ok(vec![])
-    }
-
-    pub fn handle(&mut self, muta_receipt: muta_types::BlockHookReceipt) -> Result<()> {
-        log::info!("handle muta block @ height {}", muta_receipt.height);
-        for tx in self.transform(muta_receipt)? {
-            self.ckb_client.send_transaction(tx).unwrap();
-        }
-        Ok(())
-    }
-}
+use config::Config;
 
 fn main() -> Result<()> {
     common_logger::init(
@@ -165,15 +60,26 @@ fn main() -> Result<()> {
         HashMap::new(),
     );
 
-    let ckb_url = "http://127.0.0.1:8114".to_owned();
-    let muta_url = "http://127.0.0.1:8000/graphql".to_owned();
+    // let host = "http://127.0.0.1";
+    let host = "http://192.168.10.2";
+    // let host = "http://c2020m2020.dscloud.me";
+    // let host = "http://192.168.31.222";
+    let ckb_url = host.to_owned() + ":8114";
+    let ckb_config_path = "config.toml";
+    let muta_url = host.to_owned() + ":8000/graphql";
     let relayer_pk = "0x1".to_owned();
+
+    // load config
+    let ckb_toml = fs::read_to_string(ckb_config_path)?;
+    dbg!(&ckb_toml);
+    let ckb_config: Config = toml::from_str(&ckb_toml)?;
+
 
     // ckb -> muta
     let (ckb_tx, ckb_rx) = channel();
     let ckb_listener = CkbListener::new(ckb_url.clone(), 1);
     let ckb_listener_thread = thread::spawn(move || ckb_listener.start(ckb_tx));
-    let ckb_handler = CkbHandler::new(relayer_pk.clone(), muta_url.clone());
+    let ckb_handler = CkbHandler::new(relayer_pk.clone(), muta_url.clone(), ckb_config);
     let ckb_handler_thread = thread::spawn(move || {
         for block in ckb_rx {
             ckb_handler.handle(block);
@@ -193,6 +99,7 @@ fn main() -> Result<()> {
 
     ckb_listener_thread.join().unwrap();
     ckb_handler_thread.join().unwrap();
+
     muta_listener_thread.join().unwrap();
     muta_handler_thread.join().unwrap();
 
