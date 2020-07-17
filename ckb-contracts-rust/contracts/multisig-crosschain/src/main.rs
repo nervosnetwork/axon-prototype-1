@@ -145,12 +145,11 @@ fn verify_transfer() -> Result<(), Error> {
     blake2b.update(messages.as_ref());
     blake2b.finalize(&mut message_hash);
 
-    verify_multisig(&message_hash, &pubkey_hashes, threshold, proof)
+    verify_multisig(&message_hash, &pubkey_hashes, threshold.as_bytes()[0], proof)
 }
 
-fn verify_multisig(msg_hash: &[u8], pubkey_hashes: &Hashes, raw_threshold: Byte, proof: SignatureVec) -> Result<(), Error> {
-    let msg = Message::parse_slice(msg_hash).unwrap();
-    let threshold: u8 = raw_threshold.as_bytes()[0];
+fn verify_multisig(msg_hash: &[u8; 32], pubkey_hashes: &Hashes, threshold: u8, proof: SignatureVec) -> Result<(), Error> {
+    let msg = Message::parse_slice(msg_hash).expect("invalid message hash");
     if pubkey_hashes.len() > MAX_VALIDATORS as usize {
         return Err(Error::ValidatorsOverLimit);
     }
@@ -161,7 +160,7 @@ fn verify_multisig(msg_hash: &[u8], pubkey_hashes: &Hashes, raw_threshold: Byte,
     let mut has_verified = [false; MAX_VALIDATORS];
     let mut sum_verified = 0u8;
     for raw_sig in proof.into_iter() {
-        let sig = Signature::parse_slice(&raw_sig.as_slice()[0..64]).unwrap();
+        let sig = Signature::parse_slice(&raw_sig.as_slice()[0..64]).expect("invalid signature from proof");
         let rec_id = RecoveryId::parse(raw_sig.as_slice()[64]);
         if rec_id.is_err() {
             continue;
