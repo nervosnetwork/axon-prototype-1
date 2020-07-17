@@ -22,12 +22,13 @@ use ckb_std::{
     },
 };
 use types::{CrosschainData, CrosschainDataReader, CrosschainWitness, CrosschainWitnessReader};
-
 use blake2b_ref::{Blake2b, Blake2bBuilder};
-
 use secp256k1::{recover, Message, RecoveryId, Signature};
+use crate::types::{Hashes, SignatureVec};
+use molecule::prelude::Byte;
 
 const CKB_HASH_PERSONALIZATION: &[u8] = b"ckb-default-hash";
+const MAX_VALIDATORS: usize = 16;
 
 entry!(entry);
 default_alloc!();
@@ -59,6 +60,9 @@ enum Error {
     CrosschainInputDataEncodingInvalid,
     InvalidSignature,
     PubkeyHashMismatch,
+    ValidatorsOverLimit,
+    SignaturesOverLimit,
+    MultisigNotVerified,
 }
 
 impl From<SysError> for Error {
@@ -83,6 +87,7 @@ pub fn new_blake2b() -> Blake2b {
 fn verify_init() -> Result<(), Error> {
     let script = load_script()?;
     let args: Bytes = script.args().unpack();
+
     let outpoint = load_input_out_point(0, Source::Input)?.as_bytes();
 
     if &args[..] != outpoint.as_ref() {
@@ -119,41 +124,70 @@ fn verify_transfer() -> Result<(), Error> {
         return Err(Error::WitnessMissInputType);
     }
     let witness_args: Bytes = witness_args.to_opt().unwrap().unpack();
-
     if CrosschainWitnessReader::verify(&witness_args, false).is_err() {
         return Err(Error::WitnessInvalidEncoding);
     }
+
     let crosschain_witness = CrosschainWitness::new_unchecked(witness_args.into());
     let messages = crosschain_witness.messages().as_bytes();
     let proof = crosschain_witness.proof();
+
     let crosschain_data_raw = load_cell_data(0, Source::GroupInput)?;
     if CrosschainDataReader::verify(&crosschain_data_raw, false).is_err() {
         return Err(Error::CrosschainInputDataEncodingInvalid);
     }
     let crosschain_data = CrosschainData::new_unchecked(crosschain_data_raw.into());
-    let pubkey_hash = crosschain_data.pubkey_hash().as_bytes();
+    let pubkey_hashes = crosschain_data.pubkey_hashes();
+    let threshold = crosschain_data.threshold();
 
     let mut blake2b = new_blake2b();
     let mut message_hash = [0u8; 32];
-    blake2b.update(messages.as_ref() );
+    blake2b.update(messages.as_ref());
     blake2b.finalize(&mut message_hash);
-    let sig = Signature::parse_slice(&proof.as_slice()[0..64]).unwrap();
-    let rec_id = RecoveryId::parse(proof.as_slice()[64])
-        .map_err(|_e| Error::InvalidSignature)?;
-    let msg = Message::parse_slice(&message_hash).unwrap();
-    let recover_pubkey = recover(&msg, &sig, &rec_id)
-        .map_err(|_e| Error::InvalidSignature)?
-        .serialize_compressed();
 
-    let mut blake2b = new_blake2b();
-    let mut recover_pubkey_hash = [0u8; 32];
-    blake2b.update(recover_pubkey.as_ref());
-    blake2b.finalize(&mut recover_pubkey_hash);
-    if &recover_pubkey_hash[0..20] != pubkey_hash.as_ref() {
-        return Err(Error::PubkeyHashMismatch);
+    verify_multisig(&message_hash, &pubkey_hashes, threshold, proof)
+}
+
+fn verify_multisig(msg_hash: &[u8], pubkey_hashes: &Hashes, raw_threshold: Byte, proof: SignatureVec) -> Result<(), Error> {
+    let msg = Message::parse_slice(msg_hash).unwrap();
+    let threshold: u8 = raw_threshold.as_bytes()[0];
+    if pubkey_hashes.len() > MAX_VALIDATORS as usize {
+        return Err(Error::ValidatorsOverLimit);
+    }
+    if proof.len() > MAX_VALIDATORS as usize {
+        return Err(Error::SignaturesOverLimit);
     }
 
-    Ok(())
+    let mut has_verified = [false; MAX_VALIDATORS];
+    let mut sum_verified = 0u8;
+    for raw_sig in proof.into_iter() {
+        let sig = Signature::parse_slice(&raw_sig.as_slice()[0..64]).unwrap();
+        let rec_id = RecoveryId::parse(raw_sig.as_slice()[64]);
+        if rec_id.is_err() {
+            continue;
+        }
+        let recover_pubkey = recover(&msg, &sig, &rec_id.unwrap())
+            .map_err(|_e| Error::InvalidSignature)?
+            .serialize_compressed();
+
+        let mut blake2b = new_blake2b();
+        let mut recover_pubkey_hash = [0u8; 32];
+        blake2b.update(recover_pubkey.as_ref());
+        blake2b.finalize(&mut recover_pubkey_hash);
+
+        for (index, pk_hash) in pubkey_hashes.clone().into_iter().enumerate() {
+            if !has_verified[index] && &recover_pubkey_hash[0..20] == pk_hash.as_slice() {
+                has_verified[index] = true;
+                sum_verified += 1;
+                if sum_verified >= threshold {
+                    return Ok(());
+                };
+                break;
+            }
+        }
+    }
+
+    Err(Error::MultisigNotVerified)
 }
 
 fn main() -> Result<(), Error> {
