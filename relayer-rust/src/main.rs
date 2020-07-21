@@ -38,7 +38,7 @@ use ckb_types::{
     packed::CellDep,
 };
 use ckb_server::{
-    util::{get_privkey_from_hex, gen_lock_hash, gen_tx},
+    util::{get_privkey_from_hex, gen_lock_hash},
     listener::CkbListener,
     handler::CkbHandler,
 };
@@ -67,6 +67,7 @@ fn main() -> Result<()> {
     let ckb_url = host.to_owned() + ":8114";
     let ckb_config_path = "config.toml";
     let muta_url = host.to_owned() + ":8000/graphql";
+    let ckb_indexer_url= host.to_owned() + ":8116";
     let relayer_pk = "0x1".to_owned();
 
     // load config
@@ -74,7 +75,7 @@ fn main() -> Result<()> {
     dbg!(&ckb_toml);
     let ckb_config: Config = toml::from_str(&ckb_toml)?;
 
-
+/*
     // ckb -> muta
     let (ckb_tx, ckb_rx) = channel();
     let ckb_listener = CkbListener::new(ckb_url.clone(), 1);
@@ -85,21 +86,21 @@ fn main() -> Result<()> {
             ckb_handler.handle(block);
         }
     });
-
+*/
     // muta -> ckb
     let (muta_tx, muta_rx) = channel();
     let muta_listener = MutaListener::new(muta_url.clone(), 1);
     let muta_listener_thread = thread::spawn(move || muta_listener.start(muta_tx));
-    let mut muta_handler = MutaHandler::new(relayer_pk.clone(), ckb_url.clone());
+    let mut muta_handler = MutaHandler::new(relayer_pk.clone(), ckb_url.clone(), ckb_indexer_url.clone());
     let muta_handler_thread = thread::spawn(move || {
         for receipt in muta_rx {
             muta_handler.handle(receipt);
         }
     });
-
+/*
     ckb_listener_thread.join().unwrap();
     ckb_handler_thread.join().unwrap();
-
+*/
     muta_listener_thread.join().unwrap();
     muta_handler_thread.join().unwrap();
 

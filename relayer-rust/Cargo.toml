@@ -7,7 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ckb-sdk = { git = "https://github.com/nervosnetwork/ckb-cli.git", rev = "5790414" }
+molecule = { version = "=0.6.0", default-features = false }
+ckb-sdk = { git = "https://github.com/nervosnetwork/ckb-cli.git", tag = "v0.33.0" }
 serde_json = "1.0"
 # reqwest = { version = "0.10", features = ["json"] }
 tokio = { version = "0.2", features = ["full"] }
@@ -37,8 +38,9 @@ ckb-types = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.33.0-pre1"
 ckb-hash = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.33.0-pre1" }
 ckb-crypto = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.33.0-pre1", features = ["secp"] }
 ckb-jsonrpc-types = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.33.0-pre1" }
-ckb-indexer = { git = "https://github.com/cosinlink/ckb-indexer", rev = "8679b11" }
-
+jsonrpc-core = "14.0"
+# ckb-indexer = { git = "https://github.com/cosinlink/ckb-indexer", rev = "065aeee" }
+failure = "0.1.5"
 
 
 [workspace]
