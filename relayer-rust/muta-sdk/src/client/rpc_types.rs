@@ -1,9 +1,10 @@
-use crate::utils::{hex_to_bytes, hex_to_u64};
-use graphql_client::GraphQLQuery;
+use std::convert::{TryFrom, TryInto};
+
 use muta_protocol::types as muta_types;
-use std::convert::TryFrom;
-use std::convert::TryInto;
+use serde::Deserialize;
 use thiserror::Error;
+
+use crate::util::{hex_to_bytes, hex_to_u64};
 
 #[derive(Error, Debug)]
 pub enum RpcError {
@@ -17,53 +18,85 @@ pub enum RpcError {
     ParseHex(#[from] hex::FromHexError),
     #[error("convert Int to u32 error")]
     ConvertIntToU32(#[from] std::num::TryFromIntError),
-    #[error("graphql return error")]
-    GraphQLError(Vec<graphql_client::Error>),
+    #[error("serde error")]
+    Serde(#[from] serde_json::Error),
     #[error("data is none")]
     DataIsNone,
+    #[error("graphql error: {0}")]
+    GraphQLError(String),
 }
 
-type Hash = String;
-type Uint64 = String;
-type Bytes = String;
-type Address = String;
+pub type Uint64 = String;
+pub type Hash = String;
+pub type Address = String;
+pub type Bytes = String;
+pub type MerkleRoot = String;
 
-#[derive(GraphQLQuery)]
-#[graphql(
-    query_path = "schema/queries.graphql",
-    schema_path = "schema/muta.graphql",
-    response_derives = "Debug,PartialEq"
-)]
-pub struct RpcBlock;
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Block {
+    header:            BlockHeader,
+    ordered_tx_hashes: Vec<Hash>,
+    hash:              Hash,
+}
 
-#[derive(GraphQLQuery)]
-#[graphql(
-    query_path = "schema/queries.graphql",
-    schema_path = "schema/muta.graphql",
-    response_derives = "Debug,PartialEq"
-)]
-pub struct RpcTransaction;
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockHeader {
+    pub chain_id:          Hash,
+    pub height:            Uint64,
+    pub exec_height:       Uint64,
+    pub pre_hash:          Hash,
+    pub timestamp:         Uint64,
+    pub order_root:        MerkleRoot,
+    pub confirm_root:      Vec<MerkleRoot>,
+    pub state_root:        MerkleRoot,
+    pub receipt_root:      Vec<MerkleRoot>,
+    pub cycles_used:       Vec<Uint64>,
+    pub proposer:          Address,
+    pub proof:             Proof,
+    pub validator_version: Uint64,
+    pub validators:        Vec<Validator>,
+}
 
-#[derive(GraphQLQuery)]
-#[graphql(
-    query_path = "schema/queries.graphql",
-    schema_path = "schema/muta.graphql",
-    response_derives = "Debug,PartialEq"
-)]
-pub struct RpcBlockHookReceipt;
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Proof {
+    pub height:     Uint64,
+    pub round:      Uint64,
+    pub block_hash: Hash,
+    pub signature:  Bytes,
+    pub bitmap:     Bytes,
+}
 
-#[derive(GraphQLQuery)]
-#[graphql(
-    query_path = "schema/queries.graphql",
-    schema_path = "schema/muta.graphql",
-    response_derives = "Debug,PartialEq"
-)]
-pub struct SendTransaction;
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Validator {
+    pub address:        Address,
+    pub propose_weight: i32,
+    pub vote_weight:    i32,
+}
 
-impl TryFrom<rpc_block::RpcBlockGetBlock> for muta_types::Block {
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Event {
+    pub service: String,
+    pub topic:   String,
+    pub data:    String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockHookReceipt {
+    pub height:     Uint64,
+    pub state_root: MerkleRoot,
+    pub events:     Vec<Event>,
+}
+
+impl TryFrom<Block> for muta_types::Block {
     type Error = RpcError;
 
-    fn try_from(block: rpc_block::RpcBlockGetBlock) -> Result<Self, Self::Error> {
+    fn try_from(block: Block) -> Result<Self, Self::Error> {
         Ok(Self {
             header:            block.header.try_into()?,
             ordered_tx_hashes: block
@@ -75,10 +108,10 @@ impl TryFrom<rpc_block::RpcBlockGetBlock> for muta_types::Block {
     }
 }
 
-impl TryFrom<rpc_block::RpcBlockGetBlockHeader> for muta_types::BlockHeader {
+impl TryFrom<BlockHeader> for muta_types::BlockHeader {
     type Error = RpcError;
 
-    fn try_from(header: rpc_block::RpcBlockGetBlockHeader) -> Result<Self, Self::Error> {
+    fn try_from(header: BlockHeader) -> Result<Self, Self::Error> {
         Ok(Self {
             chain_id:          muta_types::Hash::from_hex(&header.chain_id)?,
             height:            hex_to_u64(&header.height)?,
@@ -114,12 +147,10 @@ impl TryFrom<rpc_block::RpcBlockGetBlockHeader> for muta_types::BlockHeader {
     }
 }
 
-impl TryFrom<rpc_block::RpcBlockGetBlockHeaderValidators> for muta_types::Validator {
+impl TryFrom<Validator> for muta_types::Validator {
     type Error = RpcError;
 
-    fn try_from(
-        validator: rpc_block::RpcBlockGetBlockHeaderValidators,
-    ) -> Result<Self, Self::Error> {
+    fn try_from(validator: Validator) -> Result<Self, Self::Error> {
         Ok(Self {
             address:        muta_types::Address::from_hex(&validator.address)?,
             propose_weight: validator.propose_weight.try_into()?,
@@ -128,10 +159,10 @@ impl TryFrom<rpc_block::RpcBlockGetBlockHeaderValidators> for muta_types::Valida
     }
 }
 
-impl TryFrom<rpc_block::RpcBlockGetBlockHeaderProof> for muta_types::Proof {
+impl TryFrom<Proof> for muta_types::Proof {
     type Error = RpcError;
 
-    fn try_from(proof: rpc_block::RpcBlockGetBlockHeaderProof) -> Result<Self, Self::Error> {
+    fn try_from(proof: Proof) -> Result<Self, Self::Error> {
         Ok(Self {
             height:     hex_to_u64(&proof.height)?,
             round:      hex_to_u64(&proof.round)?,
@@ -142,14 +173,10 @@ impl TryFrom<rpc_block::RpcBlockGetBlockHeaderProof> for muta_types::Proof {
     }
 }
 
-impl TryFrom<rpc_block_hook_receipt::RpcBlockHookReceiptGetBlockHookReceiptEvents>
-    for muta_types::Event
-{
+impl TryFrom<Event> for muta_types::Event {
     type Error = RpcError;
 
-    fn try_from(
-        event: rpc_block_hook_receipt::RpcBlockHookReceiptGetBlockHookReceiptEvents,
-    ) -> Result<Self, Self::Error> {
+    fn try_from(event: Event) -> Result<Self, Self::Error> {
         Ok(Self {
             service: event.service,
             topic:   event.topic,
@@ -158,14 +185,10 @@ impl TryFrom<rpc_block_hook_receipt::RpcBlockHookReceiptGetBlockHookReceiptEvent
     }
 }
 
-impl TryFrom<rpc_block_hook_receipt::RpcBlockHookReceiptGetBlockHookReceipt>
-    for muta_types::BlockHookReceipt
-{
+impl TryFrom<BlockHookReceipt> for muta_types::BlockHookReceipt {
     type Error = RpcError;
 
-    fn try_from(
-        receipt: rpc_block_hook_receipt::RpcBlockHookReceiptGetBlockHookReceipt,
-    ) -> Result<Self, Self::Error> {
+    fn try_from(receipt: BlockHookReceipt) -> Result<Self, Self::Error> {
         Ok(Self {
             height:     hex_to_u64(&receipt.height)?,
             state_root: muta_types::Hash::from_hex(&receipt.state_root)?,

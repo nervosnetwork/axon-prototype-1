@@ -1,10 +1,4 @@
-pub mod rpc;
-pub mod utils;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+pub mod account;
+pub mod client;
+pub mod util;
+pub mod wallet;
