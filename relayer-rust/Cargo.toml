@@ -1,0 +1,29 @@
+[package]
+name = "relayer-rust"
+version = "0.1.0"
+authors = ["huwenchao <me@huwenchao.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ckb-sdk = { git = "https://github.com/nervosnetwork/ckb-cli.git", rev = "5790414" }
+serde_json = "1.0"
+# reqwest = { version = "0.10", features = ["json"] }
+tokio = { version = "0.2", features = ["full"] }
+
+reqwest = "^0.9"
+graphql_client = "0.9.0"
+serde = "^1.0"
+anyhow = "1.0"
+chrono = "0.4.13"
+log = "0.4"
+muta-protocol = { git = "https://github.com/mkxbl/muta.git", rev = "a18ad1e" }
+common-logger = { git = "https://github.com/mkxbl/muta.git", rev = "a18ad1e" }
+ckb-types = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.33.0-pre1" }
+muta-sdk = { path = "muta-sdk" }
+
+[workspace]
+members = [
+    "muta-sdk",
+]
