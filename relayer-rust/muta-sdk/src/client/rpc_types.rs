@@ -46,7 +46,7 @@ pub struct BlockHeader {
     pub chain_id:          Hash,
     pub height:            Uint64,
     pub exec_height:       Uint64,
-    pub pre_hash:          Hash,
+    pub prev_hash:         Hash,
     pub timestamp:         Uint64,
     pub order_root:        MerkleRoot,
     pub confirm_root:      Vec<MerkleRoot>,
@@ -57,6 +57,23 @@ pub struct BlockHeader {
     pub proof:             Proof,
     pub validator_version: Uint64,
     pub validators:        Vec<Validator>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedTransaction {
+    pub chain_id:     Hash,
+    pub cycles_limit: Uint64,
+    pub cycles_price: Uint64,
+    pub nonce:        Hash,
+    pub timeout:      Uint64,
+    pub sender:       Address,
+    pub service_name: String,
+    pub method:       String,
+    pub payload:      String,
+    pub tx_hash:      Hash,
+    pub pubkey:       Bytes,
+    pub signature:    Bytes,
 }
 
 #[derive(Debug, Deserialize)]
@@ -116,7 +133,7 @@ impl TryFrom<BlockHeader> for muta_types::BlockHeader {
             chain_id:          muta_types::Hash::from_hex(&header.chain_id)?,
             height:            hex_to_u64(&header.height)?,
             exec_height:       hex_to_u64(&header.exec_height)?,
-            pre_hash:          muta_types::Hash::from_hex(&header.pre_hash)?,
+            pre_hash:          muta_types::Hash::from_hex(&header.prev_hash)?,
             timestamp:         hex_to_u64(&header.timestamp)?,
             order_root:        muta_types::Hash::from_hex(&header.order_root)?,
             confirm_root:      header
@@ -197,6 +214,30 @@ impl TryFrom<BlockHookReceipt> for muta_types::BlockHookReceipt {
                 .into_iter()
                 .map(|s| s.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+}
+
+impl TryFrom<SignedTransaction> for muta_types::SignedTransaction {
+    type Error = RpcError;
+
+    fn try_from(tx: SignedTransaction) -> Result<Self, Self::Error> {
+        Ok(Self {
+            raw:       muta_types::RawTransaction {
+                chain_id:     muta_types::Hash::from_hex(&tx.chain_id)?,
+                cycles_price: hex_to_u64(&tx.cycles_price)?,
+                cycles_limit: hex_to_u64(&tx.cycles_limit)?,
+                nonce:        muta_types::Hash::from_hex(&tx.nonce)?,
+                request:      muta_types::TransactionRequest {
+                    method:       tx.method,
+                    service_name: tx.service_name,
+                    payload:      tx.payload,
+                },
+                timeout:      hex_to_u64(&tx.timeout)?,
+            },
+            tx_hash:   muta_types::Hash::from_hex(&tx.tx_hash)?,
+            pubkey:    hex_to_bytes(&tx.pubkey)?,
+            signature: hex_to_bytes(&tx.signature)?,
         })
     }
 }

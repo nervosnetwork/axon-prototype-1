@@ -1,3 +1,22 @@
+pub const GET_TRANSACTION_QUERY: &str = r#"
+query RpcTransaction($txHash: Hash!) {
+    getTransaction(txHash: $txHash) {
+      chainId
+      cyclesLimit
+      cyclesPrice
+      nonce
+      timeout
+      sender
+      serviceName
+      method
+      payload
+      txHash
+      pubkey
+      signature 
+    }
+  }
+"#;
+
 pub const GET_BLOCK_QUERY: &str = r#"
 query RpcBlock($height: Uint64) {
     getBlock(height: $height) {
@@ -5,7 +24,7 @@ query RpcBlock($height: Uint64) {
         chainId
         height
         execHeight
-        preHash
+        prevHash
         timestamp
         orderRoot
         confirmRoot
