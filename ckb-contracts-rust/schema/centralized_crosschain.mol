@@ -1,0 +1,34 @@
+array Byte32 [byte; 32];
+array Signature [byte; 65];
+array Hash [byte; 20];
+array Uint64 [byte; 8];
+
+struct Event {
+	asset_id: Byte32,
+	ckb_receiver: Byte32,
+	amount: Uint64,
+}
+
+vector EventsVec <Event>;
+
+table MutaHeader {
+	height: Uint64,
+}
+
+table Message {
+	header: MutaHeader,
+	events: EventsVec,
+}
+
+vector MessageVec <Message>;
+
+// witness data to unlock crosschain lock
+table CrosschainWitness {
+	messages:  MessageVec,
+	proof:  Signature,
+}
+
+// crosschain cell data
+table CrosschainData {
+	pubkey_hash: Hash,
+}
