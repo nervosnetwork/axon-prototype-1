@@ -16,7 +16,7 @@ use ckb_std::{
     ckb_types::{bytes::Bytes, prelude::*},
     debug, default_alloc, entry,
     error::SysError,
-    high_level::{load_cell, load_cell_data_hash, load_cell_lock_hash, load_script, QueryIter},
+    high_level::{load_cell, load_cell_data, load_cell_lock_hash, load_script, QueryIter},
 };
 use types::{CrosschainData, CrosschainDataReader, CrosschainWitness, CrosschainWitnessReader};
 
@@ -94,9 +94,9 @@ fn verify_transfer() -> Result<(), Error> {
     /*
      * Second, ensure crosschain cell is not changed
      */
-    let input_data_hash = load_cell_data_hash(0, Source::GroupInput)?;
-    let output_data_hash = load_cell_data_hash(0, Source::GroupOutput)?;
-    if input_data_hash != output_data_hash {
+    let input_data = load_cell_data(0, Source::GroupInput)?;
+    let output_data = load_cell_data(0, Source::GroupOutput)?;
+    if input_data != output_data {
         return Err(Error::OutDataInvalid);
     }
 
