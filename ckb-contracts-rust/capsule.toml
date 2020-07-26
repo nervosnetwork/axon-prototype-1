@@ -1,13 +1,17 @@
 deployment = "deployment.toml"
 
 [[contracts]]
-name = "lockscript"
+name = "centralized-crosschain-v2"
 template_type = "Rust"
 
-[[contracts]]
-name = "centralized-crosschain"
-template_type = "Rust"
-
-[[contracts]]
-name = "multisig-crosschain"
-template_type = "Rust"
+#[[contracts]]
+#name = "lockscript"
+#template_type = "Rust"
+#
+#[[contracts]]
+#name = "centralized-crosschain"
+#template_type = "Rust"
+#
+#[[contracts]]
+#name = "multisig-crosschain"
+#template_type = "Rust"
