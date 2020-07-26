@@ -7,31 +7,29 @@ use ckb_tool::ckb_types::{
     packed::*,
     prelude::*,
 };
-use ckb_tool::{
-    ckb_hash,
-    ckb_error::assert_error_eq,
-    ckb_script::ScriptError,
-};
-use secp256k1::{SecretKey, PublicKey};
+use ckb_tool::{ckb_error::assert_error_eq, ckb_hash, ckb_script::ScriptError};
+use secp256k1::{PublicKey, SecretKey};
 
 const MAX_CYCLES: u64 = 10000_0000;
 
 // errors
 const ERROR_AMOUNT: i8 = 5;
 
-use utils::{
-    gen_witness,
-    gen_crosschain_data,
-};
+use utils::{gen_crosschain_data, gen_witness};
 
 fn build_test_init_context(
     _inputs_token: Vec<u128>,
     outputs_token: Vec<u128>,
-    is_init_mode: bool,
+    is_v2: bool,
 ) -> (Context, TransactionView) {
     // deploy cross typescript
     let mut context = Context::default();
-    let cross_type_bin: Bytes = Loader::default().load_binary("centralized-crosschain");
+    let cross_type_bin: Bytes = if is_v2 {
+        Loader::default().load_binary("centralized-crosschain-v2")
+    } else {
+        Loader::default().load_binary("centralized-crosschain")
+    };
+
     let cross_type_out_point = context.deploy_contract(cross_type_bin);
     // deploy always_success script
     let always_success_out_point = context.deploy_contract(ALWAYS_SUCCESS.clone());
@@ -59,23 +57,30 @@ fn build_test_init_context(
 
     let inputs = vec![input];
 
-
     // build cross typescript
-    let cross_typescript_args: Bytes = if is_init_mode {
+    let cross_typescript_args: Bytes = if is_v2 {
+        // hash of lockscript in the current cell
+        lock_script.calc_script_hash().as_bytes()
+    } else {
         // use tx.input[0].outpoint as args
         inputs[0].previous_output().as_bytes()
-    } else {
-        // use zero hash as owner's lock which implies we can never enter owner mode
-        [0u8; 32].to_vec().into()
     };
 
-    println!("cross_typescript_args: {:?}", cross_typescript_args.to_vec());
-    println!("tx.inputs[0].outpoint: {:?}", inputs[0].previous_output().as_bytes().to_vec());
+    println!(
+        "cross_typescript_args: {:?}",
+        cross_typescript_args.to_vec()
+    );
+    println!(
+        "tx.inputs[0].outpoint: {:?}",
+        inputs[0].previous_output().as_bytes().to_vec()
+    );
 
     let cross_typescript = context
         .build_script(&cross_type_out_point, cross_typescript_args)
         .expect("script");
-    let cross_type_script_dep = CellDep::new_builder().out_point(cross_type_out_point).build();
+    let cross_type_script_dep = CellDep::new_builder()
+        .out_point(cross_type_out_point)
+        .build();
 
     // prepare outputs
     let output_ckb = input_ckb;
@@ -120,28 +125,30 @@ fn build_test_transfer_context(
         .out_point(always_success_out_point)
         .build();
 
-
     // build cross typescript
     // let cross_typescript_args: Bytes = inputs[0].previous_output().as_bytes();
     let cross_typescript_args: Bytes = [0u8; 32].to_vec().into();
     let cross_typescript = context
         .build_script(&cross_type_out_point, cross_typescript_args)
         .expect("script");
-    let cross_type_script_dep = CellDep::new_builder().out_point(cross_type_out_point).build();
-
+    let cross_type_script_dep = CellDep::new_builder()
+        .out_point(cross_type_out_point)
+        .build();
 
     // prepare inputs
     let crosschain_data = {
-        let privkey_bytes = hex::decode("d00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2b0").unwrap();
+        let privkey_bytes =
+            hex::decode("d00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2b0")
+                .unwrap();
         let secret_key = SecretKey::parse_slice(privkey_bytes.as_slice()).unwrap();
         let secp_pubkey = PublicKey::from_secret_key(&secret_key);
 
         let mut blake2b = ckb_hash::new_blake2b();
         let mut pubkey_hash = [0u8; 32];
-        blake2b.update(secp_pubkey.serialize_compressed().to_vec().as_slice() );
+        blake2b.update(secp_pubkey.serialize_compressed().to_vec().as_slice());
         blake2b.finalize(&mut pubkey_hash);
 
-        dbg!( &pubkey_hash.len() );
+        dbg!(&pubkey_hash.len());
 
         let cc_data: Vec<u8> = gen_crosschain_data(&pubkey_hash.to_vec().as_slice()[0..20]).into();
         Bytes::from(cc_data)
@@ -164,7 +171,6 @@ fn build_test_transfer_context(
         .build();
 
     let inputs = vec![input];
-
 
     // prepare outputs
     let output_ckb = input_ckb;
@@ -196,6 +202,18 @@ fn build_test_transfer_context(
 
 #[test]
 fn test_init() {
+    let (mut context, tx) = build_test_init_context(vec![], vec![100], false);
+    let tx = context.complete_tx(tx);
+
+    // run
+    let cycles = context
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect("pass verification");
+    dbg!("init crosschain tx v1", &cycles);
+}
+
+#[test]
+fn test_init_v2() {
     let (mut context, tx) = build_test_init_context(vec![], vec![100], true);
     let tx = context.complete_tx(tx);
 
@@ -203,12 +221,12 @@ fn test_init() {
     let cycles = context
         .verify_tx(&tx, MAX_CYCLES)
         .expect("pass verification");
-    dbg!("init tx", &cycles);
+    dbg!("init crosschain tx v2", &cycles);
 }
 
 #[test]
 fn test_transfer() {
-    let (mut context, tx) = build_test_transfer_context(vec![100], vec![100] );
+    let (mut context, tx) = build_test_transfer_context(vec![100], vec![100]);
     let tx = context.complete_tx(tx);
 
     // run
