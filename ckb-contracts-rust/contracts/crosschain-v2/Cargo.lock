@@ -13,14 +13,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9a06fb2e53271d7c279ec1efea6ab691c35a2ae67ec0d91d7acec0caf13b518"
 
 [[package]]
-name = "centralized-crosschain-v2"
-version = "0.1.0"
-dependencies = [
- "ckb-std",
- "molecule",
-]
-
-[[package]]
 name = "cfg-if"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -54,6 +46,14 @@ dependencies = [
  "cc",
  "ckb-allocator",
  "ckb-standalone-types",
+]
+
+[[package]]
+name = "crosschain-v2"
+version = "0.1.0"
+dependencies = [
+ "ckb-std",
+ "molecule",
 ]
 
 [[package]]

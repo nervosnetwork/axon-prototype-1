@@ -1,5 +1,5 @@
 [package]
-name = "centralized-crosschain-v2"
+name = "crosschain-v2"
 version = "0.1.0"
 edition = "2018"
 

@@ -1,7 +1,7 @@
 deployment = "deployment.toml"
 
 [[contracts]]
-name = "centralized-crosschain-v2"
+name = "crosschain-v2"
 template_type = "Rust"
 
 [[contracts]]

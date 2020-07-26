@@ -89,7 +89,7 @@ fn build_test_init_context(
     // deploy cross typescript
     let mut context = Context::default();
     let cross_type_bin: Bytes = if is_v2 {
-        Loader::default().load_binary("centralized-crosschain-v2")
+        Loader::default().load_binary("crosschain-v2")
     } else {
         Loader::default().load_binary("centralized-crosschain")
     };
@@ -271,7 +271,7 @@ fn build_test_transfer_context_v2(
 ) -> (Context, TransactionView) {
     // deploy cross typescript
     let mut context = Context::default();
-    let cross_type_bin: Bytes = Loader::default().load_binary("centralized-crosschain-v2");
+    let cross_type_bin: Bytes = Loader::default().load_binary("crosschain-v2");
     let cross_type_out_point = context.deploy_contract(cross_type_bin);
 
     // get pubkey_hash of the validator

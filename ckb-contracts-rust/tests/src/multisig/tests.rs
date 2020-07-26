@@ -235,7 +235,7 @@ fn build_test_transfer_context_v2(
 ) -> (Context, TransactionView) {
     // deploy cross typescript
     let mut context = Context::default();
-    let cross_type_bin: Bytes = Loader::default().load_binary("centralized-crosschain-v2");
+    let cross_type_bin: Bytes = Loader::default().load_binary("crosschain-v2");
     let cross_type_out_point = context.deploy_contract(cross_type_bin);
 
     // deploy multisig secp256 script
