@@ -14,7 +14,7 @@ use core::result::Result;
 use ckb_std::{
     ckb_constants::Source,
     ckb_types::{bytes::Bytes, prelude::*},
-    debug, default_alloc, entry,
+    default_alloc, entry,
     error::SysError,
     high_level::{load_cell, load_cell_data, load_cell_lock_hash, load_script, QueryIter},
 };
@@ -66,9 +66,6 @@ fn verify_init() -> Result<(), Error> {
     let script = load_script()?;
     let args: Bytes = script.args().unpack();
     let lock_hash = load_cell_lock_hash(0, Source::Output)?;
-
-    debug!("args: {:?}, lock_hash: {:?}", &args[..], lock_hash);
-
     if &args[..] != lock_hash.as_ref() {
         Err(Error::ArgsInvalid)
     } else {
