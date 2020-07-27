@@ -1,5 +1,5 @@
 [package]
-name = "centralized-crosschain"
+name = "crosschain-v2"
 version = "0.1.0"
 edition = "2018"
 
@@ -8,8 +8,6 @@ edition = "2018"
 [dependencies]
 ckb-std = "0.4.1"
 molecule = { version = "=0.6.0", default-features = false }
-libsecp256k1 = { version = "0.3.5", default-features = false }
-blake2b-ref = "0.1.0"
 
 [profile.release]
 overflow-checks = true
