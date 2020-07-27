@@ -44,6 +44,7 @@ enum Error {
     GroupOutputNotOne,
     GroupInputMoreThanOne,
     CapacityInvalid,
+    GroupOutPutLockInvalid,
     OutDataInvalid,
     WitnessMissInputType,
     WitnessInvalidEncoding,
@@ -91,6 +92,12 @@ fn verify_transfer() -> Result<(), Error> {
     /*
      * Second, ensure crosschain cell is not changed
      */
+    let input_lock_hash = load_cell_lock_hash(0, Source::GroupInput)?;
+    let output_lock_hash = load_cell_lock_hash(0, Source::GroupOutput)?;
+    if input_lock_hash != output_lock_hash {
+        return Err(Error::GroupOutPutLockInvalid);
+    }
+
     let input_data = load_cell_data(0, Source::GroupInput)?;
     let output_data = load_cell_data(0, Source::GroupOutput)?;
     if input_data != output_data {
