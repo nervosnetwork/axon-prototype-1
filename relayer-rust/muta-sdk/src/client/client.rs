@@ -1,18 +1,19 @@
-use std::convert::TryInto;
-
+use bytes::Bytes;
 use muta_protocol::traits as muta_traits;
 use muta_protocol::types as muta_types;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{json, Value};
+use std::convert::TryInto;
 
 use super::request::{
     GET_BLOCK_HOOK_QUERY, GET_BLOCK_QUERY, GET_RECEIPT_QUERY, GET_TRANSACTION_QUERY,
     SEND_TRANSACTION, SERVICE_QUERY,
 };
 use super::rpc_types::{
-    Block, BlockHookReceipt, InputRawTransaction, Receipt, RpcError, ServiceResponse,
-    SignedTransaction,
+    Block, BlockHookReceipt, InputRawTransaction, InputTransactionEncryption, Receipt, RpcError,
+    ServiceResponse, SignedTransaction,
 };
+use crate::account::Account;
 use crate::util::u64_to_hex;
 
 pub struct Config {
@@ -147,25 +148,37 @@ impl HttpRpcClient {
                 "payload": payload,
             },
         });
+
         let rpc_service: ServiceResponse = self.raw(&q, "queryService").await?;
         Ok(rpc_service.try_into()?)
     }
 
     pub async fn send_transaction(
         &self,
-        _tx: muta_types::SignedTransaction,
-    ) -> Result<muta_types::Hash, RpcError> {
-        // let q = json!({
-        //     "mutation": SEND_TRANSACTION,
-        //     "variables": {
-        //         "input_raw": InputRawTransaction{
-        //             chain_id:
-        //         },
-        //     },
-        // });
-        // let rpc_service: ServiceResponse = self.raw(&q, "sendTransaction").await?;
-        // Ok(rpc_service.try_into()?)
-        todo!()
+        tx: muta_types::SignedTransaction,
+    ) -> Result<muta_types::BlockHookReceipt, RpcError> {
+        let q = json!({
+            "mutation": SEND_TRANSACTION,
+            "variables": {
+                "input_raw": InputRawTransaction{
+                    chain_id: tx.raw.chain_id.as_hex(),
+                    cycles_limit: u64_to_hex(tx.raw.cycles_limit),
+                    cycles_price: u64_to_hex(tx.raw.cycles_price),
+                    nonce: tx.raw.nonce.as_hex(),
+                    timeout: u64_to_hex(tx.raw.timeout),
+                    service_name: tx.raw.request.service_name,
+                    method: tx.raw.request.method,
+                    payload: tx.raw.request.payload,
+                },
+                "input_encryption": InputTransactionEncryption {
+                    tx_hash: tx.tx_hash.as_hex(),
+                    pubkey: hex::encode(tx.pubkey),
+                    signature: hex::encode(tx.signature),
+                }
+            },
+        });
+        let rpc_hash: BlockHookReceipt = self.raw(&q, "sendTransaction").await?;
+        Ok(rpc_hash.try_into()?)
     }
 }
 
@@ -219,17 +232,49 @@ mod tests {
                 None,
                 None,
                 None,
-                muta_types::Address::from_hex(
-                    "
-                    0x0000000000000000000000000000000000000000",
-                )
-                .unwrap(),
+                muta_types::Address::from_hex("0x0000000000000000000000000000000000000000")
+                    .unwrap(),
                 "metadata".to_string(),
                 "get_metadata".to_string(),
                 "".to_string(),
             )
             .await
             .unwrap();
+        println!("{:?}", res);
+    }
+
+    #[tokio::test]
+    async fn client_send_transaction() {
+        let client = HttpRpcClient::default();
+        let account = Account::generate();
+
+        let chain_id = muta_types::Hash::from_hex(
+            "0xb6a4d7da21443f5e816e8700eea87610e6d769657d6b8ec73028457bf2ca4036",
+        )
+        .unwrap();
+        let nonce = muta_types::Hash::digest(Bytes::from(format!("{}", 0)));
+        let payload = r#"
+        {
+            "name": "test",
+            "symbol": "test",
+            "supply": 1024 * 1024,
+        }"#;
+
+        let raw = muta_types::RawTransaction {
+            chain_id,
+            nonce,
+            timeout: 20,
+            cycles_price: 1,
+            cycles_limit: 1,
+            request: muta_types::TransactionRequest {
+                service_name: "asset".to_owned(),
+                method:       "create_asset".to_owned(),
+                payload:      payload.to_owned(),
+            },
+        };
+        let signed_transaction = account.sign_raw_tx(raw);
+
+        let res = client.send_transaction(signed_transaction).await.unwrap();
         println!("{:?}", res);
     }
 }

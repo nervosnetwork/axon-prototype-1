@@ -1,4 +1,6 @@
+use hex::{decode, encode};
 use muta_protocol::types as muta_types;
+use uuid::Uuid;
 
 pub fn clean_0x(s: &str) -> String {
     if s.starts_with("0x") || s.starts_with("0X") {
@@ -22,4 +24,8 @@ pub fn u64_to_hex(n: u64) -> String {
 
 pub fn bytes_to_hex(b: muta_types::Bytes) -> String {
     "0x".to_owned() + &hex::encode(b.as_ref())
+}
+
+pub fn random_nonce() -> String {
+    return encode(Uuid::new_v4().as_bytes());
 }

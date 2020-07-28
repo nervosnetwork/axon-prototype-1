@@ -29,10 +29,10 @@ pub enum RpcError {
 }
 
 pub type Uint64 = String;
-pub type Hash = String;
 pub type Address = String;
 pub type Bytes = String;
 pub type MerkleRoot = String;
+pub type Hash = String;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -149,6 +149,14 @@ pub struct InputRawTransaction {
     pub service_name: String,
     pub method:       String,
     pub payload:      String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InputTransactionEncryption {
+    pub tx_hash:   Hash,
+    pub pubkey:    Bytes,
+    pub signature: Bytes,
 }
 
 impl TryFrom<Block> for muta_types::Block {

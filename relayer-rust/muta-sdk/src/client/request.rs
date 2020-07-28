@@ -101,7 +101,9 @@ query RpcService($height: Uint64, $cyclesLimit: Uint64, $cyclesPrice: Uint64, $c
 "#;
 
 pub const SEND_TRANSACTION: &str = r#"
-mutation RpcSendTransaction($input_raw: InputRawTransaction!, $input_encryption: InputTransactionEncryption) {
-    sendTransaction(input_raw: $input_raw, $input_encryption: input_encryption)
+mutation RpcSendTransaction($input_raw: InputRawTransaction!, $input_encryption: InputTransactionEncryption!) {
+    sendTransaction(input_raw: $input_raw, $input_encryption: input_encryption) {
+      hash
+    }
   }
 "#;
