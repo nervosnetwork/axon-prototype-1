@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use muta_protocol::traits as muta_traits;
 use muta_protocol::types as muta_types;
 use serde::{de::DeserializeOwned, Serialize};
@@ -11,10 +10,8 @@ use super::request::{
     SEND_TRANSACTION_MUTATION, SERVICE, SERVICE_QUERY,
 };
 use super::rpc_types::{
-    Block, BlockHookReceipt, InputRawTransaction, InputTransactionEncryption, Receipt, RpcError,
-    ServiceResponse, SignedTransaction,
+    Block, BlockHookReceipt, Hash, Receipt, RpcError, ServiceResponse, SignedTransaction,
 };
-use crate::account::Account;
 use crate::util::u64_to_hex;
 
 pub struct Config {
@@ -92,7 +89,7 @@ impl HttpRpcClient {
         let q = json!({
             "query": GET_TRANSACTION_QUERY,
             "variables": {
-                "txHash": tx_hash,
+                "txHash": tx_hash.as_hex(),
             },
         });
         let rpc_transaction: SignedTransaction = self.raw(&q, GET_TRANSACTION).await?;
@@ -106,7 +103,7 @@ impl HttpRpcClient {
         let q = json!({
             "query": GET_RECEIPT_QUERY,
             "variables": {
-                "txHash": tx_hash,
+                "txHash": tx_hash.as_hex(),
             },
         });
         let rpc_receipt: Receipt = self.raw(&q, GET_RECEIPT).await?;
@@ -149,7 +146,6 @@ impl HttpRpcClient {
                 "payload": payload,
             },
         });
-
         let rpc_service: ServiceResponse = self.raw(&q, SERVICE).await?;
         Ok(rpc_service.try_into()?)
     }
@@ -157,35 +153,38 @@ impl HttpRpcClient {
     pub async fn send_transaction(
         &self,
         tx: muta_types::SignedTransaction,
-    ) -> Result<muta_types::BlockHookReceipt, RpcError> {
+    ) -> Result<muta_types::Hash, RpcError> {
         let q = json!({
-            "mutation": SEND_TRANSACTION_MUTATION,
+            "query": SEND_TRANSACTION_MUTATION,
             "variables": {
-                "input_raw": InputRawTransaction{
-                    chain_id: tx.raw.chain_id.as_hex(),
-                    cycles_limit: u64_to_hex(tx.raw.cycles_limit),
-                    cycles_price: u64_to_hex(tx.raw.cycles_price),
-                    nonce: tx.raw.nonce.as_hex(),
-                    timeout: u64_to_hex(tx.raw.timeout),
-                    service_name: tx.raw.request.service_name,
-                    method: tx.raw.request.method,
-                    payload: tx.raw.request.payload,
+                "input_raw": {
+                    "chainId": tx.raw.chain_id.as_hex(),
+                    "cyclesLimit": u64_to_hex(tx.raw.cycles_limit),
+                    "cyclesPrice": u64_to_hex(tx.raw.cycles_price),
+                    "nonce": tx.raw.nonce.as_hex(),
+                    "timeout": u64_to_hex(tx.raw.timeout),
+                    "serviceName": tx.raw.request.service_name,
+                    "method": tx.raw.request.method,
+                    "payload": tx.raw.request.payload
                 },
-                "input_encryption": InputTransactionEncryption {
-                    tx_hash: tx.tx_hash.as_hex(),
-                    pubkey: hex::encode(tx.pubkey),
-                    signature: hex::encode(tx.signature),
+                "input_encryption": {
+                    "txHash": tx.tx_hash.as_hex(),
+                    "pubkey": "0x".to_owned() + &hex::encode(tx.pubkey),
+                    "signature": "0x".to_owned() + &hex::encode(tx.signature)
                 }
             },
         });
-        let rpc_hash: BlockHookReceipt = self.raw(&q, SEND_TRANSACTION).await?;
-        Ok(rpc_hash.try_into()?)
+
+        let rpc_hash: Hash = self.raw(&q, SEND_TRANSACTION).await?;
+        Ok(muta_types::Hash::from_hex(&rpc_hash)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::account::Account;
+    use crate::util::random_nonce;
 
     #[tokio::test]
     async fn client_get_block_works() {
@@ -199,7 +198,7 @@ mod tests {
         let client = HttpRpcClient::default();
 
         let tx_hash = muta_types::Hash::from_hex(
-            "0x56570de287d73cd1cb6092bb8fdee6173974955fdef345ae579ee9f475ea7432",
+            "0xe28df4b6e80223233795e5ea7e734dec5fb8d26325b48da7abd18ba9eb1007da",
         )
         .unwrap();
         let res = client.get_transaction(tx_hash).await.unwrap();
@@ -211,7 +210,7 @@ mod tests {
         let client = HttpRpcClient::default();
 
         let tx_hash = muta_types::Hash::from_hex(
-            "0x56570de287d73cd1cb6092bb8fdee6173974955fdef345ae579ee9f475ea7432",
+            "0xe28df4b6e80223233795e5ea7e734dec5fb8d26325b48da7abd18ba9eb1007da",
         )
         .unwrap();
         let res = client.get_receipt(tx_hash).await.unwrap();
@@ -247,13 +246,17 @@ mod tests {
     #[tokio::test]
     async fn client_send_transaction() {
         let client = HttpRpcClient::default();
-        let account = Account::generate();
+        let hex_privkey =
+            hex::decode("45c56be699dca666191ad3446897e0f480da234da896270202514a0e1a587c3f")
+                .unwrap();
+
+        let account = Account::from_bytes(hex_privkey.as_ref()).unwrap();
 
         let chain_id = muta_types::Hash::from_hex(
             "0xb6a4d7da21443f5e816e8700eea87610e6d769657d6b8ec73028457bf2ca4036",
         )
         .unwrap();
-        let nonce = muta_types::Hash::digest(Bytes::from(format!("{}", 0)));
+        let nonce = random_nonce();
         let payload = r#"
         {
             "name": "test",
@@ -261,10 +264,12 @@ mod tests {
             "supply": 1024 * 1024,
         }"#;
 
+        let block = client.get_block(None).await.unwrap();
+        let latest_height = block.header.height;
         let raw = muta_types::RawTransaction {
             chain_id,
             nonce,
-            timeout: 20,
+            timeout: latest_height + 20,
             cycles_price: 1,
             cycles_limit: 1,
             request: muta_types::TransactionRequest {

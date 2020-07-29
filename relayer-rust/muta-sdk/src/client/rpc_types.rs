@@ -3,7 +3,6 @@ use std::convert::{TryFrom, TryInto};
 use muta_protocol::traits as muta_traits;
 use muta_protocol::types as muta_types;
 use serde::Deserialize;
-use serde::Serialize;
 use thiserror::Error;
 
 use crate::util::{hex_to_bytes, hex_to_u64};
@@ -136,27 +135,6 @@ pub struct BlockHookReceipt {
     pub height:     Uint64,
     pub state_root: MerkleRoot,
     pub events:     Vec<Event>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InputRawTransaction {
-    pub chain_id:     Hash,
-    pub cycles_limit: Uint64,
-    pub cycles_price: Uint64,
-    pub nonce:        Hash,
-    pub timeout:      Uint64,
-    pub service_name: String,
-    pub method:       String,
-    pub payload:      String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InputTransactionEncryption {
-    pub tx_hash:   Hash,
-    pub pubkey:    Bytes,
-    pub signature: Bytes,
 }
 
 impl TryFrom<Block> for muta_types::Block {
