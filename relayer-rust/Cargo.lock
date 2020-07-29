@@ -756,6 +756,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ckb-sudt"
+version = "0.1.0-alpha.0"
+source = "git+https://github.com/mkxbl/muta.git?rev=a18ad1e#a18ad1e784a58841d79003f8aead2b79ee180e47"
+dependencies = [
+ "binding-macro",
+ "byteorder",
+ "bytes 0.5.6",
+ "derive_more 0.15.0",
+ "muta-codec-derive",
+ "muta-protocol",
+ "rlp 0.4.5",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ckb-system-scripts"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2833,6 +2849,7 @@ dependencies = [
  "ckb-hash 0.33.0-pre",
  "ckb-jsonrpc-types 0.33.0-pre",
  "ckb-sdk",
+ "ckb-sudt",
  "ckb-types 0.33.0-pre",
  "common-crypto",
  "common-logger",

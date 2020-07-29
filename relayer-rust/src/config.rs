@@ -13,6 +13,7 @@ use faster_hex::hex_decode;
 
 use std::convert::{TryFrom, TryInto};
 use ckb_jsonrpc_types::{JsonBytes, ScriptHashType};
+const RELAYER_CONFIG_NAME: &str = "relayer_config.json";
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq, Hash)]
 pub struct Config {
@@ -42,10 +43,10 @@ impl Loader {
         fs::read(path).expect("binary").into()
     }
 
-    pub fn load_relayer_config(&self, name: &str) -> serde_json::Value {
+    pub fn load_relayer_config(&self) -> serde_json::Value {
         let mut config_path = self.0.clone();
         dbg!(&config_path);
-        config_path.push(name);
+        // config_path.push();
 
         // TODO: !!! just for Debug, it will be removed after
         let mut config_path = PathBuf::new();
@@ -92,7 +93,7 @@ impl TryFrom<ConfigScript> for Script {
 
 #[test]
 fn test_load() {
-    let config: serde_json::Value = Loader::default().load_relayer_config("relayer_config.json");
+    let config: serde_json::Value = Loader::default().load_relayer_config();
     let lock_script = serde_json::from_str::<ConfigScript>(config["crosschainLockscript"].to_string().as_ref()).unwrap();
     dbg!(&lock_script);
 

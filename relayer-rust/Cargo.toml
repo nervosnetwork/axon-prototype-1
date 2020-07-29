@@ -22,6 +22,7 @@ log = "0.4"
 muta-protocol = { git = "https://github.com/mkxbl/muta.git", rev = "a18ad1e" }
 common-logger = { git = "https://github.com/mkxbl/muta.git", rev = "a18ad1e" }
 ckb-handler = { git = "https://github.com/mkxbl/muta.git", rev = "a18ad1e" }
+ckb-sudt = { git = "https://github.com/mkxbl/muta.git", rev = "a18ad1e" }
 common-crypto = { git = "https://github.com/mkxbl/muta.git", rev = "a18ad1e" }
 rand = "0.7"
 hex = "0.4"
