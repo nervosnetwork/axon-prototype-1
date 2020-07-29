@@ -13,6 +13,8 @@ use thiserror::Error;
 pub enum AccountError {
     #[error("parse error")]
     Crypto(#[from] common_crypto::Error),
+    #[error("from hex error")]
+    FromHex(#[from] hex::FromHexError),
 }
 
 pub struct Account {
@@ -34,8 +36,8 @@ impl Account {
     }
 
     pub fn from_hex(hex_priv_key: &str) -> Result<Self, AccountError> {
-        let private_key = Secp256k1PrivateKey::try_from(hex_priv_key.as_bytes())?;
-        Ok(Account::new(private_key))
+        let hex_privkey = hex::decode(hex_priv_key)?;
+        Ok(Account::from_bytes(hex_privkey.as_ref())?)
     }
 
     pub fn from_bytes(bytes_priv_key: &[u8]) -> Result<Self, AccountError> {

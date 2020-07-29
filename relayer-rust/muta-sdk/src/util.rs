@@ -1,4 +1,3 @@
-use hex::{decode, encode};
 use muta_protocol::types as muta_types;
 use rand::random;
 
@@ -27,6 +26,6 @@ pub fn bytes_to_hex(b: muta_types::Bytes) -> String {
 }
 
 pub fn random_nonce() -> muta_types::Hash {
-    let vec: Vec<u8> = (0..10).map(|_| random::<u8>()).collect();
+    let vec: Vec<u8> = (0..32).map(|_| random::<u8>()).collect();
     return muta_types::Hash::digest(muta_types::Bytes::from(vec));
 }

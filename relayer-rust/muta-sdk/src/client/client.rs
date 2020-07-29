@@ -246,11 +246,9 @@ mod tests {
     #[tokio::test]
     async fn client_send_transaction() {
         let client = HttpRpcClient::default();
-        let hex_privkey =
-            hex::decode("45c56be699dca666191ad3446897e0f480da234da896270202514a0e1a587c3f")
+        let account =
+            Account::from_hex("45c56be699dca666191ad3446897e0f480da234da896270202514a0e1a587c3f")
                 .unwrap();
-
-        let account = Account::from_bytes(hex_privkey.as_ref()).unwrap();
 
         let chain_id = muta_types::Hash::from_hex(
             "0xb6a4d7da21443f5e816e8700eea87610e6d769657d6b8ec73028457bf2ca4036",
