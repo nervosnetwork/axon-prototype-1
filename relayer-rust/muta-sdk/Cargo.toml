@@ -15,7 +15,6 @@ muta-protocol = { git = "https://github.com/mkxbl/muta.git", rev = "a18ad1e" }
 common-crypto = { git = "https://github.com/mkxbl/muta.git", rev = "a18ad1e" }
 serde_json = "1.0"
 bytes = "0.5"
-uuid = { version = "0.7", features = ["serde", "v4"] }
 rand = "0.7"
 
 [dev-dependencies]

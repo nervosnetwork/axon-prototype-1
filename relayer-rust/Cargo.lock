@@ -2049,7 +2049,6 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio 0.2.21",
- "uuid",
 ]
 
 [[package]]

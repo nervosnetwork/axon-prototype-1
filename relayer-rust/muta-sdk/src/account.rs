@@ -7,6 +7,13 @@ use muta_protocol::fixed_codec::FixedCodec;
 use muta_protocol::types::{Address, Hash, RawTransaction, SignedTransaction};
 use rand::rngs::OsRng;
 use std::convert::TryFrom;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum AccountError {
+    #[error("parse error")]
+    Crypto(#[from] common_crypto::Error),
+}
 
 pub struct Account {
     private_key: Secp256k1PrivateKey,
@@ -26,14 +33,14 @@ impl Account {
         }
     }
 
-    pub fn from_hex(hex_priv_key: &str) -> Self {
-        let private_key = Secp256k1PrivateKey::try_from(hex_priv_key.as_bytes()).unwrap();
-        Account::new(private_key)
+    pub fn from_hex(hex_priv_key: &str) -> Result<Self, AccountError> {
+        let private_key = Secp256k1PrivateKey::try_from(hex_priv_key.as_bytes())?;
+        Ok(Account::new(private_key))
     }
 
-    pub fn from_bytes(bytes_priv_key: &[u8]) -> Self {
-        let private_key = Secp256k1PrivateKey::try_from(bytes_priv_key).unwrap();
-        Account::new(private_key)
+    pub fn from_bytes(bytes_priv_key: &[u8]) -> Result<Self, AccountError> {
+        let private_key = Secp256k1PrivateKey::try_from(bytes_priv_key)?;
+        Ok(Account::new(private_key))
     }
 
     /// generate account randomly
@@ -59,20 +66,20 @@ impl Account {
         todo!()
     }
 
-    pub fn sign_raw_tx(&self, raw: RawTransaction) -> SignedTransaction {
+    pub fn sign_raw_tx(&self, raw: RawTransaction) -> Result<SignedTransaction, AccountError> {
         let bytes = raw.encode_fixed().unwrap();
         let tx_hash = Hash::digest(bytes);
         let hash_value = HashValue::try_from(tx_hash.as_bytes().as_ref())
             .ok()
-            .unwrap();
+            .expect("mismatch length");
         let signature = self.private_key.sign_message(&hash_value);
 
         let pubkey = self.get_public_key();
-        SignedTransaction {
+        Ok(SignedTransaction {
             raw,
             tx_hash,
             pubkey: pubkey.to_bytes(),
             signature: signature.to_bytes(),
-        }
+        })
     }
 }

@@ -6,8 +6,9 @@ use serde_json::{json, Value};
 use std::convert::TryInto;
 
 use super::request::{
-    GET_BLOCK_HOOK_QUERY, GET_BLOCK_QUERY, GET_RECEIPT_QUERY, GET_TRANSACTION_QUERY,
-    SEND_TRANSACTION, SERVICE_QUERY,
+    GET_BLOCK, GET_BLOCK_HOOK_RECEIPT, GET_BLOCK_HOOK_RECEIPT_QUERY, GET_BLOCK_QUERY, GET_RECEIPT,
+    GET_RECEIPT_QUERY, GET_TRANSACTION, GET_TRANSACTION_QUERY, SEND_TRANSACTION,
+    SEND_TRANSACTION_MUTATION, SERVICE, SERVICE_QUERY,
 };
 use super::rpc_types::{
     Block, BlockHookReceipt, InputRawTransaction, InputTransactionEncryption, Receipt, RpcError,
@@ -80,7 +81,7 @@ impl HttpRpcClient {
                 "h": height.map(u64_to_hex),
             },
         });
-        let rpc_block: Block = self.raw(&q, "getBlock").await?;
+        let rpc_block: Block = self.raw(&q, GET_BLOCK).await?;
         Ok(rpc_block.try_into()?)
     }
 
@@ -94,7 +95,7 @@ impl HttpRpcClient {
                 "txHash": tx_hash,
             },
         });
-        let rpc_transaction: SignedTransaction = self.raw(&q, "getTransaction").await?;
+        let rpc_transaction: SignedTransaction = self.raw(&q, GET_TRANSACTION).await?;
         Ok(rpc_transaction.try_into()?)
     }
 
@@ -108,7 +109,7 @@ impl HttpRpcClient {
                 "txHash": tx_hash,
             },
         });
-        let rpc_receipt: Receipt = self.raw(&q, "getReceipt").await?;
+        let rpc_receipt: Receipt = self.raw(&q, GET_RECEIPT).await?;
         Ok(rpc_receipt.try_into()?)
     }
 
@@ -117,12 +118,12 @@ impl HttpRpcClient {
         height: u64,
     ) -> Result<muta_types::BlockHookReceipt, RpcError> {
         let q = json!({
-            "query": GET_BLOCK_HOOK_QUERY,
+            "query": GET_BLOCK_HOOK_RECEIPT_QUERY,
             "variables": {
                 "height": u64_to_hex(height),
             },
         });
-        let rpc_block_hook_receipt: BlockHookReceipt = self.raw(&q, "getBlockHookReceipt").await?;
+        let rpc_block_hook_receipt: BlockHookReceipt = self.raw(&q, GET_BLOCK_HOOK_RECEIPT).await?;
         Ok(rpc_block_hook_receipt.try_into()?)
     }
 
@@ -149,7 +150,7 @@ impl HttpRpcClient {
             },
         });
 
-        let rpc_service: ServiceResponse = self.raw(&q, "queryService").await?;
+        let rpc_service: ServiceResponse = self.raw(&q, SERVICE).await?;
         Ok(rpc_service.try_into()?)
     }
 
@@ -158,7 +159,7 @@ impl HttpRpcClient {
         tx: muta_types::SignedTransaction,
     ) -> Result<muta_types::BlockHookReceipt, RpcError> {
         let q = json!({
-            "mutation": SEND_TRANSACTION,
+            "mutation": SEND_TRANSACTION_MUTATION,
             "variables": {
                 "input_raw": InputRawTransaction{
                     chain_id: tx.raw.chain_id.as_hex(),
@@ -177,7 +178,7 @@ impl HttpRpcClient {
                 }
             },
         });
-        let rpc_hash: BlockHookReceipt = self.raw(&q, "sendTransaction").await?;
+        let rpc_hash: BlockHookReceipt = self.raw(&q, SEND_TRANSACTION).await?;
         Ok(rpc_hash.try_into()?)
     }
 }
@@ -272,7 +273,7 @@ mod tests {
                 payload:      payload.to_owned(),
             },
         };
-        let signed_transaction = account.sign_raw_tx(raw);
+        let signed_transaction = account.sign_raw_tx(raw).unwrap();
 
         let res = client.send_transaction(signed_transaction).await.unwrap();
         println!("{:?}", res);

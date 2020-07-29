@@ -1,6 +1,6 @@
 use hex::{decode, encode};
 use muta_protocol::types as muta_types;
-use uuid::Uuid;
+use rand::random;
 
 pub fn clean_0x(s: &str) -> String {
     if s.starts_with("0x") || s.starts_with("0X") {
@@ -27,5 +27,6 @@ pub fn bytes_to_hex(b: muta_types::Bytes) -> String {
 }
 
 pub fn random_nonce() -> String {
-    return encode(Uuid::new_v4().as_bytes());
+    let vec: Vec<u8> = (0..10).map(|_| random::<u8>()).collect();
+    return encode(muta_types::Bytes::from(vec));
 }

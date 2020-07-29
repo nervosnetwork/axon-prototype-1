@@ -1,3 +1,4 @@
+pub const GET_TRANSACTION: &str = "getTransaction";
 pub const GET_TRANSACTION_QUERY: &str = r#"
 query RpcTransaction($txHash: Hash!) {
     getTransaction(txHash: $txHash) {
@@ -16,6 +17,7 @@ query RpcTransaction($txHash: Hash!) {
   }
 "#;
 
+pub const GET_BLOCK: &str = "getBlock";
 pub const GET_BLOCK_QUERY: &str = r#"
 query RpcBlock($height: Uint64) {
     getBlock(height: $height) {
@@ -51,6 +53,7 @@ query RpcBlock($height: Uint64) {
   }
 "#;
 
+pub const GET_RECEIPT: &str = "getReceipt";
 pub const GET_RECEIPT_QUERY: &str = r#"
 query RpcReceipt($txHash: Hash!) {
     getReceipt(txHash: $txHash) {
@@ -76,7 +79,8 @@ query RpcReceipt($txHash: Hash!) {
   }
 "#;
 
-pub const GET_BLOCK_HOOK_QUERY: &str = r#"
+pub const GET_BLOCK_HOOK_RECEIPT: &str = "getBlockHookReceipt";
+pub const GET_BLOCK_HOOK_RECEIPT_QUERY: &str = r#"
 query RpcBlockHookReceipt($height: Uint64!) {
     getBlockHookReceipt(height: $height) {
       height
@@ -90,6 +94,7 @@ query RpcBlockHookReceipt($height: Uint64!) {
   }
 "#;
 
+pub const SERVICE: &str = "queryService";
 pub const SERVICE_QUERY: &str = r#"
 query RpcService($height: Uint64, $cyclesLimit: Uint64, $cyclesPrice: Uint64, $caller: Address!, $serviceName: String!, $method: String!, $payload: String!) {
     queryService(height: $height, cyclesLimit: $cyclesLimit, cyclesPrice: $cyclesPrice, caller: $caller, serviceName: $serviceName, method: $method, payload: $payload) {
@@ -100,7 +105,8 @@ query RpcService($height: Uint64, $cyclesLimit: Uint64, $cyclesPrice: Uint64, $c
   }
 "#;
 
-pub const SEND_TRANSACTION: &str = r#"
+pub const SEND_TRANSACTION: &str = "sendTransaction";
+pub const SEND_TRANSACTION_MUTATION: &str = r#"
 mutation RpcSendTransaction($input_raw: InputRawTransaction!, $input_encryption: InputTransactionEncryption!) {
     sendTransaction(input_raw: $input_raw, $input_encryption: input_encryption) {
       hash
