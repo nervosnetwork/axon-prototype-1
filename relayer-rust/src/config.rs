@@ -41,15 +41,8 @@ impl Loader {
     }
 
     pub fn load_relayer_config(&self) -> serde_json::Value {
-        let config_path = self.0.clone();
-        dbg!(&config_path);
-        // config_path.push();
-
-        // TODO: !!! just for Debug, it will be removed after
-        let mut config_path = PathBuf::new();
-        config_path.push("/Users/hyz/WebstormProjects/axon_copy/relayer/config.json");
-        // Just for Debug
-
+        let mut config_path = self.0.clone();
+        config_path.push(RELAYER_CONFIG_NAME);
         let json_str = fs::read_to_string(&config_path).expect("relayer config load failed");
         serde_json::from_str(&json_str).expect("invalid relayer config json")
     }
@@ -85,4 +78,9 @@ impl TryFrom<ConfigScript> for Script {
             args,
         })
     }
+}
+
+#[test]
+fn test_config() {
+    dbg!(Loader::default().load_relayer_config());
 }
