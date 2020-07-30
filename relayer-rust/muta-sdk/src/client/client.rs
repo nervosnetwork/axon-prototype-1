@@ -194,30 +194,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn client_get_transaction_works() {
-        let client = HttpRpcClient::default();
-
-        let tx_hash = muta_types::Hash::from_hex(
-            "0xe28df4b6e80223233795e5ea7e734dec5fb8d26325b48da7abd18ba9eb1007da",
-        )
-        .unwrap();
-        let res = client.get_transaction(tx_hash).await.unwrap();
-        println!("{:?}", res);
-    }
-
-    #[tokio::test]
-    async fn client_get_receipt() {
-        let client = HttpRpcClient::default();
-
-        let tx_hash = muta_types::Hash::from_hex(
-            "0xe28df4b6e80223233795e5ea7e734dec5fb8d26325b48da7abd18ba9eb1007da",
-        )
-        .unwrap();
-        let res = client.get_receipt(tx_hash).await.unwrap();
-        println!("{:?}", res);
-    }
-
-    #[tokio::test]
     async fn client_get_block_hook_receipt() {
         let client = HttpRpcClient::default();
         let res = client.get_block_hook_receipt(1).await.unwrap();
@@ -278,7 +254,12 @@ mod tests {
         };
         let signed_transaction = account.sign_raw_tx(raw).unwrap();
 
-        let res = client.send_transaction(signed_transaction).await.unwrap();
-        println!("{:?}", res);
+        let tx_hash = client.send_transaction(signed_transaction).await.unwrap();
+        println!("{:?}", tx_hash);
+
+        let transaction = client.get_transaction(tx_hash.clone()).await.unwrap();
+        println!("{:?}", transaction);
+        let receipt = client.get_receipt(tx_hash.clone()).await.unwrap();
+        println!("{:?}", receipt);
     }
 }

@@ -15,6 +15,8 @@ pub enum AccountError {
     Crypto(#[from] common_crypto::Error),
     #[error("from hex error")]
     FromHex(#[from] hex::FromHexError),
+    #[error("muta error")]
+    MutaProtocol(#[from] muta_protocol::ProtocolError),
 }
 
 pub struct Account {
@@ -69,11 +71,9 @@ impl Account {
     }
 
     pub fn sign_raw_tx(&self, raw: RawTransaction) -> Result<SignedTransaction, AccountError> {
-        let bytes = raw.encode_fixed().unwrap();
+        let bytes = raw.encode_fixed()?;
         let tx_hash = Hash::digest(bytes);
-        let hash_value = HashValue::try_from(tx_hash.as_bytes().as_ref())
-            .ok()
-            .expect("mismatch length");
+        let hash_value = HashValue::try_from(tx_hash.as_bytes().as_ref()).expect("mismatch length");
         let signature = self.private_key.sign_message(&hash_value);
 
         let pubkey = self.get_public_key();

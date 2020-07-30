@@ -37,7 +37,6 @@ impl Wallet {
     ) -> Result<Secp256k1PrivateKey, WalletError> {
         let ext_private_key =
             ExtendedPrivKey::derive(self.seed.as_bytes(), Wallet::get_hd_path(account_index))
-                .ok()
                 .expect("derive error");
 
         let priv_bytes: &[u8] = &ext_private_key.secret();
@@ -47,7 +46,6 @@ impl Wallet {
     fn get_hd_path(account_index: u64) -> DerivationPath {
         let path: DerivationPath = format!("m/44'/918/{}'/0/0", account_index)
             .parse()
-            .ok()
             .expect("format derivation path");
         return path;
     }
