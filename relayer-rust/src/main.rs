@@ -3,18 +3,15 @@ mod config;
 mod muta_server;
 mod tests;
 
-use std::collections::HashMap;
-use std::sync::mpsc::channel;
-use std::thread;
 use anyhow::Result;
 use ckb_sdk::rpc::Script;
-use std::convert::TryInto;
-use ckb_server::{
-    handler::CkbHandler,
-    listener::CkbListener,
-};
-use muta_server::{handler::MutaHandler, listener::MutaListener};
+use ckb_server::{handler::CkbHandler, listener::CkbListener};
 use config::{ConfigScript, Loader};
+use muta_server::{handler::MutaHandler, listener::MutaListener};
+use std::collections::HashMap;
+use std::convert::TryInto;
+use std::sync::mpsc::channel;
+use std::thread;
 
 fn main() -> Result<()> {
     common_logger::init(

@@ -48,17 +48,19 @@ pub fn gen_lock_args(privkey_hex: String) -> H160 {
 }
 
 pub fn gen_lock_hash(privkey_hex: String) -> H256 {
-    let lock_arg = gen_lock_args(privkey_hex);
-    let lock_script = packed::Script::new_builder()
-        .code_hash(SIGHASH_TYPE_HASH.pack())
-        .hash_type(ScriptHashType::Type.into())
-        .args(Bytes::from(lock_arg.as_bytes().to_vec()).pack())
-        .build();
-
+    let lock_args = gen_lock_args(privkey_hex);
+    let lock_script = gen_lockscript(lock_args);
     let lock_hash: H256 = lock_script.calc_script_hash().unpack();
     println!("lock_hash: {:?}", hex_string(&lock_hash.0[..]));
-
     lock_hash
+}
+
+pub fn gen_lockscript(lock_args: H160) -> packed::Script {
+    packed::Script::new_builder()
+        .code_hash(SIGHASH_TYPE_HASH.pack())
+        .hash_type(ScriptHashType::Type.into())
+        .args(Bytes::from(lock_args.as_bytes().to_vec()).pack())
+        .build()
 }
 
 pub fn gen_unlock_sudt_tx(
@@ -197,8 +199,38 @@ pub fn gen_unlock_sudt_tx(
     dbg!(inputs_cc_sudt.len());
     inputs.extend(inputs_cc_sudt);
 
-    // add outputs of sudt change from back_to_cc
+    // add outputs of sudt to unlock
     let mut outputs_capacity = 0u64;
+    for (asset_id, asset_map) in assets.iter() {
+        for (receiver, amount) in asset_map {
+            let receiver_lockscript = {
+                let mut data = [0u8; 20];
+                hex_decode(&receiver.as_bytes()[2..], &mut data[..]);
+                let lock_args = H160::from(data);
+
+                gen_lockscript(lock_args)
+            };
+            let typescript = Script {
+                code_hash: sudt_typescript.code_hash.clone(),
+                hash_type: sudt_typescript.hash_type.clone(),
+                args:      JsonBytes::from_bytes(asset_id.as_bytes()),
+            };
+
+            outputs.push(
+                packed::CellOutput::new_builder()
+                    .capacity(SUDT_CELL_CAPACITY.pack())
+                    .lock(receiver_lockscript.into())
+                    .type_(Some(packed::Script::from(typescript)).pack())
+                    .build(),
+            );
+
+            let data = &amount.to_le_bytes()[..];
+            outputs_data.push(Bytes::copy_from_slice(data));
+            outputs_capacity += SUDT_CELL_CAPACITY;
+        }
+    }
+
+    // add outputs of sudt change from back_to_cc
     for (asset_id, amount) in back_to_cc.iter() {
         let typescript = Script {
             code_hash: sudt_typescript.code_hash.clone(),
@@ -226,7 +258,10 @@ pub fn gen_unlock_sudt_tx(
 
         let lock_args = gen_lock_args(validator_privkey_hex.to_owned());
         let lock_hash = gen_lock_hash(validator_privkey_hex.to_owned());
-        dbg!(hex_string(lock_args.as_bytes()), hex_string(lock_hash.as_bytes()));
+        dbg!(
+            hex_string(lock_args.as_bytes()),
+            hex_string(lock_hash.as_bytes())
+        );
 
         let (inputs_payer, payer_given_capacity, lock_payer) =
             collect_live_inputs(ckb_indexer_client, need_capacity, lock_args);

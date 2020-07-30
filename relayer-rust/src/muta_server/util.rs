@@ -1,7 +1,5 @@
 use ckb_handler::types::{BatchMintSudt, CKBMessage, MintSudt};
-use common_crypto::{
-    HashValue, PrivateKey, Secp256k1PrivateKey, Signature
-};
+use common_crypto::{HashValue, PrivateKey, Secp256k1PrivateKey, Signature};
 use muta_protocol::types as muta_types;
 use muta_protocol::types::JsonString;
 use rand::random;
