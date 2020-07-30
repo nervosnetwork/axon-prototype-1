@@ -43,7 +43,6 @@ pub fn gen_lock_args(privkey_hex: String) -> H160 {
 
     let lock_arg = H160::from_slice(&blake2b_256(&pubkey.serialize()[..])[0..20])
         .expect("Generate hash(H160) from pubkey failed");
-    dbg!(hex_string(&lock_arg.0[..]));
     lock_arg
 }
 
@@ -118,16 +117,10 @@ pub fn gen_unlock_sudt_tx(
         let cell_info = cell_with_status.cell.expect("cell is none");
 
         let input_ckb = cell_info.output.capacity.value();
-        dbg!(input_ckb);
         let cell_data = cell_info.data.expect("cell data is none");
 
-        dbg!(hex_string(cell_data.hash.as_bytes()));
         (input_ckb, cell_data.content.into_bytes())
     };
-
-    // TODO debug
-    dbg!(input_ckb);
-    println!("input_data.to_vec(): {:?}", input_data.to_vec());
 
     // cell deps
     let secp256_dep: packed::CellDep = genesis_info.sighash_dep();
@@ -170,11 +163,6 @@ pub fn gen_unlock_sudt_tx(
         config_script.try_into().unwrap()
     };
 
-    // Todo debug
-    println!("cross_lockscript: {:?}", cross_lockscript.clone());
-    println!("validators_lockscript: {:?}", validators_lockscript.clone());
-    println!("cross_typescript: {:?}", cross_typescript.clone());
-
     // get input from crosschainCell
     let input = packed::CellInput::new_builder()
         .previous_output(crosschain_cell_out_point.clone())
@@ -196,7 +184,6 @@ pub fn gen_unlock_sudt_tx(
     // add inputs of cc_lockscript to unlock the sudt which is in balance_sum
     let (inputs_cc_sudt, back_to_cc, inputs_capacity) =
         collect_inputs_cc_sudt(ckb_indexer_client, balance_sum, cross_lockscript.clone());
-    dbg!(inputs_cc_sudt.len());
     inputs.extend(inputs_cc_sudt);
 
     // add outputs of sudt to unlock
@@ -257,25 +244,11 @@ pub fn gen_unlock_sudt_tx(
         let need_capacity = outputs_capacity + TX_FEE - inputs_capacity;
 
         let lock_args = gen_lock_args(validator_privkey_hex.to_owned());
-        let lock_hash = gen_lock_hash(validator_privkey_hex.to_owned());
-        dbg!(
-            hex_string(lock_args.as_bytes()),
-            hex_string(lock_hash.as_bytes())
-        );
-
         let (inputs_payer, payer_given_capacity, lock_payer) =
             collect_live_inputs(ckb_indexer_client, need_capacity, lock_args);
-
-        dbg!(inputs_payer.len());
         inputs.extend(inputs_payer);
 
         let payer_change: u64 = payer_given_capacity + inputs_capacity - TX_FEE - outputs_capacity;
-        dbg!(
-            inputs_capacity,
-            payer_given_capacity,
-            outputs_capacity,
-            payer_change
-        );
         // add outputs of payer
         outputs.push(
             packed::CellOutput::new_builder()
@@ -292,15 +265,6 @@ pub fn gen_unlock_sudt_tx(
         .input_type(Some(Bytes::from(cc_witness)).pack())
         .build();
 
-    dbg!(
-        "inputs_len = ",
-        inputs.len(),
-        "outputs_len=",
-        outputs.len(),
-        "outputs_data_len=",
-        outputs_data.len()
-    );
-
     // build transaction
     let tx = TransactionBuilder::default()
         .inputs(inputs)
@@ -315,16 +279,7 @@ pub fn gen_unlock_sudt_tx(
     // sign
     let bytes = hex::decode(&validator_privkey_hex.as_bytes()[2..]).unwrap();
     let privkey = Privkey::from_slice(bytes.as_ref());
-
-    println!(
-        "pubkey of validator: {:?}",
-        privkey.pubkey().unwrap().to_string()
-    );
-
     let tx = sign_tx(tx, &privkey);
-    let tx_hash: [u8; 32] = tx.hash().unpack();
-
-    dbg!(hex_string(&tx_hash[..]).unwrap());
     tx.data()
 }
 
@@ -405,31 +360,16 @@ pub fn collect_live_inputs(
     // unspent_cells -> inputs
     let mut actual_capacity = 0u64;
     let mut inputs = vec![];
-    dbg!("collect_live_inputs", live_cells.objects.len());
-    for (index, cell) in live_cells.objects.iter().enumerate() {
+    for (_index, cell) in live_cells.objects.iter().enumerate() {
         // must no type script in case that using the special cells
         if cell.output.type_.is_some() {
             continue;
         }
 
-        println!(
-            "cell index = {}, cell.outpoint.tx_hash = {}, tx_index={}",
-            index,
-            hex_string(cell.out_point.tx_hash.as_bytes()).unwrap(),
-            cell.out_point.index.value()
-        );
-
         let input_out_point: packed::OutPoint = cell.out_point.clone().into();
         let input = packed::CellInput::new_builder()
             .previous_output(input_out_point.clone())
             .build();
-
-        let index: u32 = input_out_point.clone().index().unpack();
-        println!(
-            "--------\r\ntx_hash={}, index={}\r\n--------",
-            hex_string(input_out_point.clone().tx_hash().as_slice()).unwrap(),
-            index
-        );
 
         actual_capacity += cell.output.capacity.value();
         inputs.push(input);
@@ -446,8 +386,6 @@ pub fn collect_inputs_cc_sudt(
     balance_sum: &mut HashMap<muta_types::Hash, u128>,
     cross_lockscript: Script,
 ) -> (Vec<packed::CellInput>, HashMap<muta_types::Hash, u128>, u64) {
-    dbg!("collect_inputs_cc_sudt");
-
     let rpc_lock = JsonScript {
         code_hash: cross_lockscript.code_hash,
         hash_type: cross_lockscript.hash_type,
@@ -468,16 +406,7 @@ pub fn collect_inputs_cc_sudt(
     let mut inputs_capacity = 0u64;
     let mut back_to_cc = HashMap::<muta_types::Hash, u128>::new();
 
-    dbg!("get live_cells success: len = ", live_cells.objects.len());
-
-    for (index, cell) in live_cells.objects.iter().enumerate() {
-        println!(
-            "cell index = {}, cell.outpoint.tx_hash = {}, tx_index={},  ",
-            index,
-            hex_string(cell.out_point.tx_hash.as_bytes()).unwrap(),
-            cell.out_point.index.value(),
-        );
-
+    for (_index, cell) in live_cells.objects.iter().enumerate() {
         // just collect the sudt typescript
         if cell.output.type_.is_none() {
             continue;
@@ -486,8 +415,6 @@ pub fn collect_inputs_cc_sudt(
             let typescript = cell.output.type_.clone().unwrap();
             typescript.args
         };
-
-        dbg!(hex_string(sudt_id.clone().as_bytes()).unwrap());
 
         let res = muta_types::Hash::from_bytes(sudt_id.into_bytes());
         if res.is_err() {
@@ -504,14 +431,6 @@ pub fn collect_inputs_cc_sudt(
         };
 
         let input_out_point: packed::OutPoint = cell.out_point.clone().into();
-
-        let index: u32 = input_out_point.clone().index().unpack();
-        println!(
-            "--------\r\ntx_hash={}, index={}\r\n--------",
-            hex_string(input_out_point.clone().tx_hash().as_slice()).unwrap(),
-            index
-        );
-
         let input = packed::CellInput::new_builder()
             .previous_output(input_out_point.clone())
             .build();
@@ -519,9 +438,6 @@ pub fn collect_inputs_cc_sudt(
         inputs_capacity += cell.output.capacity.value();
 
         let need_amount = balance_sum.entry(asset_id.clone()).or_insert(0);
-
-        dbg!(need_amount.clone(), given_amount);
-
         if *need_amount > given_amount {
             *need_amount -= given_amount;
         } else {
@@ -529,8 +445,6 @@ pub fn collect_inputs_cc_sudt(
             balance_sum.remove(&asset_id);
         }
     }
-
-    dbg!(back_to_cc.clone());
 
     (inputs, back_to_cc, inputs_capacity)
 }
