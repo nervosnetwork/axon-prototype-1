@@ -1,16 +1,12 @@
-use molecule::prelude::*;
-use molecule::bytes::Bytes;
-
 use crate::ckb_server::types::{
-    Signature, CrosschainWitnessBuilder, CrosschainData, Uint64,
-    MutaHeader, Message, MessageVec, Hash,
+    CrosschainData, CrosschainWitnessBuilder, Hash, Message, MessageVec, MutaHeader, Signature,
+    Uint64,
 };
+use molecule::prelude::*;
 
 use ckb_crypto::secp::{Privkey, Signature as CkbSignature};
 use ckb_hash;
-use ckb_types::{
-    H256
-};
+use ckb_types::H256;
 
 pub fn gen_witness() -> Vec<u8> {
     let height = 99u64;
@@ -18,15 +14,12 @@ pub fn gen_witness() -> Vec<u8> {
         .height(Uint64::from_slice(&height.to_le_bytes()).unwrap())
         .build();
 
-    let message = Message::new_builder()
-        .header(header)
-        .build();
+    let message = Message::new_builder().header(header).build();
 
-    let messages = MessageVec::new_builder()
-        .push(message)
-        .build();
+    let messages = MessageVec::new_builder().push(message).build();
 
-    let privkey_bytes = hex::decode("d00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2b0").unwrap();
+    let privkey_bytes =
+        hex::decode("d00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2b0").unwrap();
     let privkey = Privkey::from_slice(privkey_bytes.as_slice());
 
     let raw_msg: Vec<u8> = messages.as_bytes().to_vec();
@@ -57,10 +50,4 @@ pub fn gen_crosschain_data(pubkey_hash: &[u8]) -> Vec<u8> {
         .build();
 
     cc_data.as_bytes().to_vec()
-}
-
-
-#[test]
-pub fn test_gen_witness(){
-    gen_witness();
 }

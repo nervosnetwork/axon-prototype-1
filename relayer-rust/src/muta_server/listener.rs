@@ -1,13 +1,12 @@
-use std::sync::mpsc::{channel, Sender};
-use std::{thread, time::Duration};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use muta_protocol::types as muta_types;
 use muta_sdk::rpc::client::HttpRpcClient as MutaClient;
-
+use std::sync::mpsc::Sender;
+use std::{thread, time::Duration};
 
 pub struct MutaListener {
-    url: String,
-    interval: u64,
+    url:           String,
+    interval:      u64,
     latest_height: Option<u64>,
 }
 
@@ -32,7 +31,7 @@ impl MutaListener {
                 sender.send(receipt)?;
             } else {
                 let latest = self.latest_height.unwrap();
-                for h in (latest + 1..=current_latest_height) {
+                for h in latest + 1..=current_latest_height {
                     let receipt = muta_client.get_block_hook_receipt(h).unwrap();
                     sender.send(receipt)?;
                 }

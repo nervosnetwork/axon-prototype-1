@@ -1,16 +1,6 @@
-use crate::ckb_server::util::gen_lock_args;
-use ckb_jsonrpc_types::{
-    BannedAddr, Block, BlockNumber, BlockReward, BlockTemplate, BlockView, CellOutputWithOutPoint,
-    CellTransaction, CellWithStatus, ChainInfo, EpochNumber, EpochView, HeaderView, LiveCell,
-    LockHashIndexState, Node, OutPoint, PeerState, Timestamp, Transaction, TransactionWithStatus,
-    TxPoolInfo, Uint64, Version,
-    Capacity, CellOutput, JsonBytes, Script, Uint32, ScriptHashType,
-};
-// use jsonrpc_core::{Error, IoHandler, Result};
+use ckb_jsonrpc_types::{BlockNumber, Capacity, CellOutput, JsonBytes, OutPoint, Script, Uint32};
+use ckb_types::H256;
 use serde::{Deserialize, Serialize};
-use ckb_types::{core, packed, prelude::*, H256};
-use std::convert::{TryInto, TryFrom};
-
 
 macro_rules! jsonrpc {
     (
@@ -90,9 +80,8 @@ jsonrpc!(pub struct RawHttpRpcClient {
     pub fn get_cells_capacity(&mut self, search_key: SearchKey) -> Option<CellsCapacity>;
     });
 
-
 pub struct IndexerRpcClient {
-    url: String,
+    url:    String,
     client: RawHttpRpcClient,
 }
 
@@ -105,11 +94,11 @@ impl IndexerRpcClient {
     pub fn url(&self) -> &str {
         self.url.as_str()
     }
+
     pub fn client(&mut self) -> &mut RawHttpRpcClient {
         &mut self.client
     }
 }
-
 
 impl IndexerRpcClient {
     pub fn get_tip(&mut self) -> Result<Option<Tip>, String> {
@@ -143,7 +132,10 @@ impl IndexerRpcClient {
             .map_err(|err| err.to_string())
     }
 
-    pub fn get_cells_capacity(&mut self, search_key: SearchKey) -> Result<Option<CellsCapacity>, String> {
+    pub fn get_cells_capacity(
+        &mut self,
+        search_key: SearchKey,
+    ) -> Result<Option<CellsCapacity>, String> {
         self.client
             .get_cells_capacity(search_key)
             .map(|opt| opt.map(Into::into))
@@ -151,12 +143,11 @@ impl IndexerRpcClient {
     }
 }
 
-
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
 pub struct SearchKey {
-    pub(crate) script: Script,
+    pub(crate) script:      Script,
     pub(crate) script_type: ScriptType,
-    pub(crate) args_len: Option<Uint32>,
+    pub(crate) args_len:    Option<Uint32>,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
@@ -175,33 +166,33 @@ pub enum Order {
 
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
 pub struct Tip {
-    pub block_hash: H256,
+    pub block_hash:   H256,
     pub block_number: BlockNumber,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
 pub struct CellsCapacity {
-    pub capacity: Capacity,
-    pub block_hash: H256,
+    pub capacity:     Capacity,
+    pub block_hash:   H256,
     pub block_number: BlockNumber,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
 pub struct Cell {
-    pub output: CellOutput,
-    pub output_data: JsonBytes,
-    pub out_point: OutPoint,
+    pub output:       CellOutput,
+    pub output_data:  JsonBytes,
+    pub out_point:    OutPoint,
     pub block_number: BlockNumber,
-    pub tx_index: Uint32,
+    pub tx_index:     Uint32,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
 pub struct Tx {
-    pub tx_hash: H256,
+    pub tx_hash:      H256,
     pub block_number: BlockNumber,
-    pub tx_index: Uint32,
-    pub io_index: Uint32,
-    pub io_type: IOType,
+    pub tx_index:     Uint32,
+    pub io_index:     Uint32,
+    pub io_type:      IOType,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
@@ -213,18 +204,13 @@ pub enum IOType {
 
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
 pub struct Pagination<T> {
-    pub objects: Vec<T>,
+    pub objects:     Vec<T>,
     pub last_cursor: JsonBytes,
 }
 
-
 #[test]
 pub fn test_rpc() {
-    use ckb_sdk::{
-        constants::{
-            SIGHASH_TYPE_HASH
-        },
-    };
+    use ckb_sdk::constants::SIGHASH_TYPE_HASH;
 
     let url = "http://0.0.0.0:8116";
     let mut client = IndexerRpcClient::new(url.to_owned());
@@ -232,32 +218,33 @@ pub fn test_rpc() {
     println!("get_tip res:  {:?}", res);
 
     let search = SearchKey {
-        script: Script {
+        script:      Script {
             code_hash: H256::try_from([0u8; 32]).unwrap(),
             hash_type: ScriptHashType::Type,
-            args: JsonBytes::default(),
+            args:      JsonBytes::default(),
         },
         script_type: ScriptType::Lock,
-        args_len: None,
+        args_len:    None,
     };
 
     let res = client.get_cells_capacity(search.clone());
     println!("get_cells_capacity res:  {:#?}", res);
 
-    let lock_args = gen_lock_args("0xd00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2bc".to_owned());
+    let lock_args = gen_lock_args(
+        "0xd00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2bc".to_owned(),
+    );
     let search = SearchKey {
-        script: Script {
+        script:      Script {
             code_hash: SIGHASH_TYPE_HASH.clone(),
             hash_type: ScriptHashType::Type,
-            args: JsonBytes::from_vec(lock_args.0.to_vec()),
+            args:      JsonBytes::from_vec(lock_args.0.to_vec()),
         },
         script_type: ScriptType::Lock,
-        args_len: None,
+        args_len:    None,
     };
     let mut limit = Uint32::try_from(100u32).unwrap();
     let res = client.get_cells(search.clone(), Order::Asc, limit, None);
     println!("get_cells res:  {:#?}", res);
-
 
     let res = client.get_transactions(search.clone(), Order::Asc, limit, None);
     println!("get_transactions res:  {:#?}", res);

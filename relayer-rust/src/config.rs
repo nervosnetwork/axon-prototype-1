@@ -1,23 +1,21 @@
 use ckb_sdk::rpc::Script;
-use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 // config file
+use serde_json;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use serde_json::json;
 
+use ckb_jsonrpc_types::{JsonBytes, ScriptHashType};
 use ckb_types::bytes::Bytes;
 use ckb_types::H256;
-use faster_hex::hex_decode;
-
-use std::convert::{TryFrom, TryInto};
-use ckb_jsonrpc_types::{JsonBytes, ScriptHashType};
+use std::convert::TryFrom;
 const RELAYER_CONFIG_NAME: &str = "relayer_config.json";
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq, Hash)]
 pub struct Config {
-    pub lockscript: Script
+    pub lockscript: Script,
 }
 
 pub struct Loader(PathBuf);
@@ -39,12 +37,11 @@ impl Loader {
     pub fn load_binary(&self, name: &str) -> Bytes {
         let mut path = self.0.clone();
         path.push(name);
-        println!("binary_path: {:?}", path);
         fs::read(path).expect("binary").into()
     }
 
     pub fn load_relayer_config(&self) -> serde_json::Value {
-        let mut config_path = self.0.clone();
+        let config_path = self.0.clone();
         dbg!(&config_path);
         // config_path.push();
 
@@ -63,9 +60,8 @@ impl Loader {
 pub struct ConfigScript {
     pub code_hash: String,
     pub hash_type: String,
-    pub args: String,
+    pub args:      String,
 }
-
 
 impl TryFrom<ConfigScript> for Script {
     type Error = hex::FromHexError;
@@ -80,7 +76,7 @@ impl TryFrom<ConfigScript> for Script {
         let hash_type = match script.hash_type.as_str() {
             "data" => ScriptHashType::Data,
             "type" => ScriptHashType::Type,
-            _ => panic!("hash_type invalid")
+            _ => panic!("hash_type invalid"),
         };
 
         Ok(Self {
@@ -89,17 +85,4 @@ impl TryFrom<ConfigScript> for Script {
             args,
         })
     }
-}
-
-#[test]
-fn test_load() {
-    let config: serde_json::Value = Loader::default().load_relayer_config();
-    let lock_script = serde_json::from_str::<ConfigScript>(config["crosschainLockscript"].to_string().as_ref()).unwrap();
-    dbg!(&lock_script);
-
-    let script: Script = lock_script.try_into().unwrap();
-    dbg!(script.args.as_bytes());
-
-    let privkey_hex = config["ckb"]["privateKey"].as_str().unwrap();
-    assert_eq!(privkey_hex, "0xd00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2b0");
 }

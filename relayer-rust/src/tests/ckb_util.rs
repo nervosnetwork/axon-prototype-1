@@ -1,6 +1,2 @@
-
 #[test]
-fn test_ckb_transaction() {
-
-
-}
+fn test_ckb_transaction() {}

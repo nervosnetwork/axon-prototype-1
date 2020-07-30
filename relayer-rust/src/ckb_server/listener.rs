@@ -1,11 +1,11 @@
-use std::sync::mpsc::{channel, Sender};
-use std::{thread, time::Duration};
 use anyhow::{anyhow, Result};
-use ckb_sdk::rpc::{HttpRpcClient, CellOutput};
+use ckb_sdk::rpc::HttpRpcClient;
+use std::sync::mpsc::Sender;
+use std::{thread, time::Duration};
 
 pub struct CkbListener {
-    url: String,
-    interval: u64,
+    url:              String,
+    interval:         u64,
     tip_block_number: Option<u64>,
 }
 
@@ -30,7 +30,7 @@ impl CkbListener {
                 sender.send(block)?;
             } else {
                 let latest = self.tip_block_number.unwrap();
-                for h in (latest + 1..=tip_block_number) {
+                for h in latest + 1..=tip_block_number {
                     let block = ckb_rpc_client
                         .get_block_by_number(h)
                         .unwrap()
