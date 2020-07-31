@@ -1,5 +1,6 @@
 use std::convert::{TryFrom, TryInto};
 
+use muta_protocol::traits as muta_traits;
 use muta_protocol::types as muta_types;
 use serde::Deserialize;
 use thiserror::Error;
@@ -27,10 +28,10 @@ pub enum RpcError {
 }
 
 pub type Uint64 = String;
-pub type Hash = String;
 pub type Address = String;
 pub type Bytes = String;
 pub type MerkleRoot = String;
+pub type Hash = String;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,6 +58,49 @@ pub struct BlockHeader {
     pub proof:             Proof,
     pub validator_version: Uint64,
     pub validators:        Vec<Validator>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedTransaction {
+    pub chain_id:     Hash,
+    pub cycles_limit: Uint64,
+    pub cycles_price: Uint64,
+    pub nonce:        Hash,
+    pub timeout:      Uint64,
+    pub service_name: String,
+    pub method:       String,
+    pub payload:      String,
+    pub tx_hash:      Hash,
+    pub pubkey:       Bytes,
+    pub signature:    Bytes,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Receipt {
+    pub state_root:  MerkleRoot,
+    pub height:      Uint64,
+    pub tx_hash:     Hash,
+    pub cycles_used: Uint64,
+    pub events:      Vec<Event>,
+    pub response:    ReceiptResponse,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiptResponse {
+    pub service_name: String,
+    pub method:       String,
+    pub response:     ServiceResponse,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceResponse {
+    pub code:          Uint64,
+    pub succeed_data:  String,
+    pub error_message: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -197,6 +241,73 @@ impl TryFrom<BlockHookReceipt> for muta_types::BlockHookReceipt {
                 .into_iter()
                 .map(|s| s.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+}
+
+impl TryFrom<SignedTransaction> for muta_types::SignedTransaction {
+    type Error = RpcError;
+
+    fn try_from(tx: SignedTransaction) -> Result<Self, Self::Error> {
+        Ok(Self {
+            raw:       muta_types::RawTransaction {
+                chain_id:     muta_types::Hash::from_hex(&tx.chain_id)?,
+                cycles_price: hex_to_u64(&tx.cycles_price)?,
+                cycles_limit: hex_to_u64(&tx.cycles_limit)?,
+                nonce:        muta_types::Hash::from_hex(&tx.nonce)?,
+                request:      muta_types::TransactionRequest {
+                    method:       tx.method,
+                    service_name: tx.service_name,
+                    payload:      tx.payload,
+                },
+                timeout:      hex_to_u64(&tx.timeout)?,
+            },
+            tx_hash:   muta_types::Hash::from_hex(&tx.tx_hash)?,
+            pubkey:    hex_to_bytes(&tx.pubkey)?,
+            signature: hex_to_bytes(&tx.signature)?,
+        })
+    }
+}
+
+impl TryFrom<Receipt> for muta_types::Receipt {
+    type Error = RpcError;
+
+    fn try_from(receipt: Receipt) -> Result<Self, Self::Error> {
+        Ok(Self {
+            state_root:  muta_types::MerkleRoot::from_hex(&receipt.state_root)?,
+            height:      hex_to_u64(&receipt.height)?,
+            tx_hash:     muta_types::Hash::from_hex(&receipt.tx_hash)?,
+            cycles_used: hex_to_u64(&receipt.cycles_used)?,
+            events:      receipt
+                .events
+                .into_iter()
+                .map(|s| s.try_into())
+                .collect::<Result<Vec<_>, _>>()?,
+            response:    receipt.response.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<ReceiptResponse> for muta_types::ReceiptResponse {
+    type Error = RpcError;
+
+    fn try_from(response: ReceiptResponse) -> Result<Self, Self::Error> {
+        Ok(Self {
+            service_name: response.service_name,
+            method:       response.method,
+            response:     response.response.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<ServiceResponse> for muta_traits::ServiceResponse<String> {
+    type Error = RpcError;
+
+    fn try_from(response: ServiceResponse) -> Result<Self, Self::Error> {
+        Ok(Self {
+            code:          hex_to_u64(&response.code)?,
+            succeed_data:  response.succeed_data,
+            error_message: response.error_message,
         })
     }
 }

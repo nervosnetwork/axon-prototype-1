@@ -1,4 +1,5 @@
 use muta_protocol::types as muta_types;
+use rand::random;
 
 pub fn clean_0x(s: &str) -> String {
     if s.starts_with("0x") || s.starts_with("0X") {
@@ -22,4 +23,9 @@ pub fn u64_to_hex(n: u64) -> String {
 
 pub fn bytes_to_hex(b: muta_types::Bytes) -> String {
     "0x".to_owned() + &hex::encode(b.as_ref())
+}
+
+pub fn random_nonce() -> muta_types::Hash {
+    let vec: Vec<u8> = (0..32).map(|_| random::<u8>()).collect();
+    muta_types::Hash::digest(muta_types::Bytes::from(vec))
 }

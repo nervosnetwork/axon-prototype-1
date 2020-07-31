@@ -2043,6 +2043,7 @@ dependencies = [
  "common-crypto",
  "hex",
  "muta-protocol",
+ "rand 0.7.3",
  "reqwest 0.10.6",
  "serde",
  "serde_json",
