@@ -8,15 +8,12 @@ use std::fs;
 use std::path::PathBuf;
 
 use ckb_jsonrpc_types::{JsonBytes, ScriptHashType};
-use ckb_types::bytes::Bytes;
 use ckb_types::H256;
-use std::convert::TryFrom;
-const RELAYER_CONFIG_NAME: &str = "relayer_config.json";
+use ckb_types::{bytes::Bytes, packed, prelude::*};
+use faster_hex::hex_decode;
+use std::convert::{TryFrom, TryInto};
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq, Hash)]
-pub struct Config {
-    pub lockscript: Script,
-}
+const RELAYER_CONFIG_NAME: &str = "relayer_config.json";
 
 pub struct Loader(PathBuf);
 
@@ -80,7 +77,36 @@ impl TryFrom<ConfigScript> for Script {
     }
 }
 
+pub trait RelayerConfig {
+    fn get_script(&self, name: &str) -> Script;
+    fn get_tx_hash(&self, name: &str) -> packed::Byte32;
+}
+
+impl RelayerConfig for serde_json::Value {
+    fn get_script(&self, name: &str) -> Script {
+        let config_script =
+            serde_json::from_str::<ConfigScript>(self[name].to_string().as_ref()).unwrap();
+
+        config_script
+            .try_into()
+            .expect("get script from config failed")
+    }
+
+    fn get_tx_hash(&self, name: &str) -> packed::Byte32 {
+        let str = relayer_config[name]
+            .as_str()
+            .expect("get tx_hash from config failed");
+        let mut dst = [0u8; 32];
+        hex_decode(&str.as_bytes()[2..], &mut dst).expect("tx_hash decode error");
+        packed::Byte32::from_slice(dst.as_ref()).expect("transfer tx_hash to Byte32 failed")
+    }
+}
+
 #[test]
 fn test_config() {
-    dbg!(Loader::default().load_relayer_config());
+    let relayer_config = Loader::default().load_relayer_config();
+    let cross_lockscript: Script = relayer_config.get_script("crosschainLockscript");
+    let cross_typescript: Script = relayer_config.get_script("crosschainTypescript");
+
+    dbg!(cross_lockscript, cross_typescript);
 }

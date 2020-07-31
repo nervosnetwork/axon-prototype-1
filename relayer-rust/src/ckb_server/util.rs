@@ -11,7 +11,7 @@ use ckb_types::{
     H160, H256,
 };
 
-use crate::config::{ConfigScript, Loader};
+use crate::config::{Loader, RelayerConfig};
 use ckb_crypto::secp::{Privkey, SECP256K1};
 use ckb_hash::{blake2b_256, new_blake2b};
 use ckb_jsonrpc_types::{
@@ -33,7 +33,8 @@ const SUDT_CELL_CAPACITY: u64 = 16 * 100000000 + 14100000000;
 
 pub fn get_privkey_from_hex(privkey_hex: String) -> secp256k1::SecretKey {
     let mut privkey_bytes = [0u8; 32];
-    hex_decode(&privkey_hex.as_bytes()[2..], &mut privkey_bytes);
+    hex_decode(&privkey_hex.as_bytes()[2..], &mut privkey_bytes)
+        .expect("hex decode privkey_hex error");
     secp256k1::SecretKey::from_slice(&privkey_bytes[..]).unwrap()
 }
 
@@ -73,25 +74,10 @@ pub fn gen_unlock_sudt_tx(
     let validator_privkey_hex = relayer_config["ckb"]["privateKey"]
         .as_str()
         .expect("validator private key invalid");
+    let deploy_tx_hash = relayer_config.get_tx_hash("deployTxHash");
+    let crosschain_cell_tx_hash = relayer_config.get_tx_hash("createCrosschainCellTxHash");
 
-    let deploy_tx_hash = {
-        let str = relayer_config["deployTxHash"]
-            .as_str()
-            .expect("deployTxHash invalid");
-        let mut dst = [0u8; 32];
-        hex_decode(&str.as_bytes()[2..], &mut dst).expect("deploy_tx_hash decode error");
-        packed::Byte32::from_slice(dst.as_ref()).expect("deployTxHash to Byte32 failed")
-    };
-    let crosschain_cell_tx_hash = {
-        let str = relayer_config["createCrosschainCellTxHash"]
-            .as_str()
-            .expect("createCrosschainCellTxHash invalid");
-        let mut dst = [0u8; 32];
-        hex_decode(&str.as_bytes()[2..], &mut dst).expect("crosschain_cell_tx_hash decode error");
-        packed::Byte32::from_slice(dst.as_ref())
-            .expect("createCrosschainCellTxHash to Byte32 failed")
-    };
-
+    // outpoint
     let sudt_type_out_point = packed::OutPoint::new_builder()
         .tx_hash(deploy_tx_hash.clone())
         .index(0u32.pack())
@@ -135,33 +121,10 @@ pub fn gen_unlock_sudt_tx(
         .build();
 
     // lockscript && typescript
-    let cross_lockscript: Script = {
-        let config_script = serde_json::from_str::<ConfigScript>(
-            relayer_config["crosschainLockscript"].to_string().as_ref(),
-        )
-        .unwrap();
-        config_script.try_into().unwrap()
-    };
-    let validators_lockscript: Script = {
-        let config_script = serde_json::from_str::<ConfigScript>(
-            relayer_config["validatorsLockscript"].to_string().as_ref(),
-        )
-        .unwrap();
-        config_script.try_into().unwrap()
-    };
-    let cross_typescript: Script = {
-        let config_script = serde_json::from_str::<ConfigScript>(
-            relayer_config["crosschainTypescript"].to_string().as_ref(),
-        )
-        .unwrap();
-        config_script.try_into().unwrap()
-    };
-    let sudt_typescript: Script = {
-        let config_script =
-            serde_json::from_str::<ConfigScript>(relayer_config["udtScript"].to_string().as_ref())
-                .unwrap();
-        config_script.try_into().unwrap()
-    };
+    let cross_lockscript: Script = relayer_config.get_script("crosschainLockscript");
+    let validators_lockscript: Script = relayer_config.get_script("validatorsLockscript");
+    let cross_typescript: Script = relayer_config.get_script("crosschainTypescript");
+    let sudt_typescript: Script = relayer_config.get_script("udtScript");
 
     // get input from crosschainCell
     let input = packed::CellInput::new_builder()
@@ -192,7 +155,8 @@ pub fn gen_unlock_sudt_tx(
         for (receiver, amount) in asset_map {
             let receiver_lockscript = {
                 let mut data = [0u8; 20];
-                hex_decode(&receiver.as_bytes()[2..], &mut data[..]).expect("decode receiver error");
+                hex_decode(&receiver.as_bytes()[2..], &mut data[..])
+                    .expect("decode receiver error");
                 let lock_args = H160::from(data);
 
                 gen_lockscript(lock_args)

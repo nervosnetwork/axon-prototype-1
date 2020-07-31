@@ -1,4 +1,6 @@
-use ckb_jsonrpc_types::{BlockNumber, Capacity, CellOutput, JsonBytes, OutPoint, Script, Uint32, ScriptHashType};
+use ckb_jsonrpc_types::{
+    BlockNumber, Capacity, CellOutput, JsonBytes, OutPoint, Script, ScriptHashType, Uint32,
+};
 use ckb_types::H256;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
