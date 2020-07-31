@@ -192,7 +192,7 @@ pub fn gen_unlock_sudt_tx(
         for (receiver, amount) in asset_map {
             let receiver_lockscript = {
                 let mut data = [0u8; 20];
-                hex_decode(&receiver.as_bytes()[2..], &mut data[..]);
+                hex_decode(&receiver.as_bytes()[2..], &mut data[..]).expect("decode receiver error");
                 let lock_args = H160::from(data);
 
                 gen_lockscript(lock_args)
@@ -397,7 +397,7 @@ pub fn collect_inputs_cc_sudt(
         script_type: ScriptType::Lock,
         args_len:    None,
     };
-    let mut limit = Uint32::try_from(100u32).unwrap();
+    let limit = Uint32::try_from(100u32).unwrap();
     let live_cells: Pagination<Cell> = ckb_indexer_client
         .get_cells(search_key, Order::Asc, limit, None)
         .unwrap();
