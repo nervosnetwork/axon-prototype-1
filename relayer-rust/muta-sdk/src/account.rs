@@ -85,3 +85,18 @@ impl Account {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_account() {
+        let account =
+            Account::from_hex("1000000000000000000000000000000000000000000000000000000000000000")
+                .unwrap();
+        assert_eq!(
+            account.get_address().as_hex(),
+            "0xd17b9e27ef454ce597f3f05a5b5d4dcc96a423f9"
+        );
+    }
+}

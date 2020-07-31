@@ -27,5 +27,5 @@ pub fn bytes_to_hex(b: muta_types::Bytes) -> String {
 
 pub fn random_nonce() -> muta_types::Hash {
     let vec: Vec<u8> = (0..32).map(|_| random::<u8>()).collect();
-    return muta_types::Hash::digest(muta_types::Bytes::from(vec));
+    muta_types::Hash::digest(muta_types::Bytes::from(vec))
 }

@@ -124,6 +124,7 @@ impl HttpRpcClient {
         Ok(rpc_block_hook_receipt.try_into()?)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn query_service(
         &self,
         height: Option<u64>,
@@ -233,9 +234,9 @@ mod tests {
         let nonce = random_nonce();
         let payload = r#"
         {
-            "name": "test",
-            "symbol": "test",
-            "supply": 1024 * 1024,
+            "asset_id": "0xf56924db538e77bb5951eb5ff0d02b88983c49c45eea30e8ae3e7234b311436c",
+            "to": "0xa55e1261a73116c755291140e427caa0cbb5309e",
+            "value": 1,
         }"#;
 
         let block = client.get_block(None).await.unwrap();
@@ -248,7 +249,7 @@ mod tests {
             cycles_limit: 1,
             request: muta_types::TransactionRequest {
                 service_name: "asset".to_owned(),
-                method:       "create_asset".to_owned(),
+                method:       "transfer".to_owned(),
                 payload:      payload.to_owned(),
             },
         };
