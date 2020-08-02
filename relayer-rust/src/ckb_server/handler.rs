@@ -39,19 +39,11 @@ impl CkbHandler {
         ckb_block: ckb_sdk::rpc::BlockView,
     ) -> Result<Vec<muta_types::SignedTransaction>> {
         let mut batch_mints: Vec<MintSudt> = vec![];
-
         dbg!(ckb_block.transactions.len());
-
-        if ckb_block.transactions.len() > 1 {
-            dbg!("discover lock to cross block");
-        };
-
         let mut tx_mints = vec![];
         for tx_view in ckb_block.transactions.into_iter() {
             // sum the cross tx and gen tx_mints
-            for (index, output) in tx_view.inner.outputs.iter().enumerate() {
-                dbg!(index, output.type_.is_some());
-
+            for (_index, output) in tx_view.inner.outputs.iter().enumerate() {
                 if output.type_.is_none() {
                     continue;
                 }
@@ -102,7 +94,7 @@ impl CkbHandler {
         }
 
         // outputs -> ckbMessage
-        let payload = gen_ckb_message(batch_mints);
+        let payload = gen_ckb_message(batch_mints, self.relayer_sk.clone());
 
         // generate tx
         let raw_tx = gen_raw_tx(payload);

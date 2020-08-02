@@ -1,4 +1,5 @@
 use ckb_handler::types::{BatchMintSudt, CKBMessage, MintSudt};
+use ckb_types::H256;
 use common_crypto::{HashValue, PrivateKey, Secp256k1PrivateKey, Signature};
 use muta_protocol::types as muta_types;
 use muta_protocol::types::JsonString;
@@ -38,20 +39,15 @@ pub fn gen_transaction_request(paload: JsonString) -> muta_types::TransactionReq
     }
 }
 
-pub fn gen_ckb_message(batch_mints: Vec<MintSudt>) -> String {
+pub fn gen_ckb_message(batch_mints: Vec<MintSudt>, private_key: H256) -> String {
     let batch_mint_payload = BatchMintSudt { batch: batch_mints };
     let batch_mint_payload =
         muta_types::Bytes::from(serde_json::to_vec(&batch_mint_payload).unwrap());
     let ckb_message_payload = "0x".to_owned() + &hex::encode(batch_mint_payload.clone());
     let payload_hash = muta_types::Hash::digest(batch_mint_payload);
     let hash_value = HashValue::try_from(payload_hash.as_bytes().as_ref()).unwrap();
-    let private_key = muta_types::Hex::from_string(
-        "0x30269d47fcf602b889243722b666881bf953f1213228363d34cf04ddcd51dfd2".to_owned(),
-    )
-    .unwrap()
-    .as_bytes()
-    .unwrap();
-    let secp_private = Secp256k1PrivateKey::try_from(private_key.as_ref()).unwrap();
+
+    let secp_private = Secp256k1PrivateKey::try_from(private_key.as_bytes()).unwrap();
     let signature = secp_private.sign_message(&hash_value).to_bytes();
     let signature = "0x".to_owned() + &hex::encode(signature.clone());
     let ckb_message = CKBMessage {

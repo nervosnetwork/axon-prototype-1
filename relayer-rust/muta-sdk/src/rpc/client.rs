@@ -4,8 +4,7 @@ use graphql_client::{GraphQLQuery, Response};
 use muta_protocol::types as muta_types;
 use std::convert::TryInto;
 
-// const DEFAULT_MUTA_URL: &str = "http://127.0.0.1:8000/graphql";
-const DEFAULT_MUTA_URL: &str = "http://192.168.10.2:8000/graphql";
+const DEFAULT_MUTA_URL: &str = "http://127.0.0.1:8000/graphql";
 
 pub struct HttpRpcClient {
     pub url: String,
