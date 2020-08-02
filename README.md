@@ -22,7 +22,8 @@ $ ckb miner -C ckb-data
 
 # muta chain
 # open another terminal
-$ git clone https://github.com/mkxbl/muta/tree/axon-single-operator
+$ git clone https://github.com/mkxbl/muta
+$ git checkout axon-single-operator
 $ cd muta
 $ cargo build --release --example muta-chain
 $ ./target/release/examples/muta-chain

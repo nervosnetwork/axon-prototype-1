@@ -1,12 +1,14 @@
+#![feature(in_band_lifetimes)]
+
+mod cfg;
 mod ckb_server;
-mod config;
 mod muta_server;
 mod tests;
 
 use anyhow::Result;
+use cfg::{Loader, RelayerConfig};
 use ckb_sdk::rpc::Script;
 use ckb_server::{handler::CkbHandler, listener::CkbListener};
-use config::{ConfigScript, Loader, RelayerConfig};
 use muta_server::{handler::MutaHandler, listener::MutaListener};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -26,28 +28,19 @@ fn main() -> Result<()> {
 
     // load config
     let relayer_config = Loader::default().load_relayer_config();
-    let cross_lockscript: Script = relayer_config.get_script("crosschainLockscript");
-    let cross_typescript: Script = relayer_config.get_script("crosschainTypescript");
-    let relayer_sk = relayer_config["muta"]["privateKey"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let ckb_url = relayer_config["ckb"]["url"].as_str().unwrap().to_string();
-    let ckb_indexer_url = relayer_config["ckb"]["url_indexer"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let muta_url = relayer_config["muta"]["endpoint"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let cross_lockscript: Script = relayer_config.ckb.crosschain_lockscript;
+    let cross_typescript: Script = relayer_config.ckb.crosschain_typescript;
+    let relayer_sk = relayer_config.muta.private_key;
+    let ckb_url = relayer_config.ckb.url;
+    let ckb_indexer_url = relayer_config.ckb.url_indexer;
+    let muta_url = relayer_config.muta.endpoint;
 
     // ckb -> muta
     let (ckb_tx, ckb_rx) = channel();
     let ckb_listener = CkbListener::new(ckb_url.clone(), 1);
     let ckb_listener_thread = thread::spawn(move || ckb_listener.start(ckb_tx));
     let ckb_handler = CkbHandler::new(
-        relayer_sk.to_string(),
+        relayer_sk.clone(),
         muta_url.clone(),
         cross_lockscript.clone(),
         cross_typescript,
@@ -62,11 +55,7 @@ fn main() -> Result<()> {
     let (muta_tx, muta_rx) = channel();
     let muta_listener = MutaListener::new(muta_url.clone(), 1);
     let muta_listener_thread = thread::spawn(move || muta_listener.start(muta_tx));
-    let mut muta_handler = MutaHandler::new(
-        relayer_sk.to_string(),
-        ckb_url.clone(),
-        ckb_indexer_url.clone(),
-    );
+    let mut muta_handler = MutaHandler::new(relayer_sk, ckb_url.clone(), ckb_indexer_url.clone());
     let muta_handler_thread = thread::spawn(move || {
         for receipt in muta_rx {
             muta_handler.handle(receipt);

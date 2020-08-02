@@ -42,7 +42,7 @@ ckb-jsonrpc-types = { git = "https://github.com/nervosnetwork/ckb", tag = "v0.33
 jsonrpc-core = "14.0"
 # ckb-indexer = { git = "https://github.com/cosinlink/ckb-indexer", rev = "065aeee" }
 failure = "0.1.5"
-
+config = "0.9"
 
 [workspace]
 members = [

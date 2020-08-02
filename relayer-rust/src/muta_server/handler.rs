@@ -4,7 +4,7 @@ use ckb_sdk::{rpc::HttpRpcClient, GenesisInfo};
 use anyhow::{anyhow, Result};
 use ckb_sudt::types::BurnSudtEvent;
 use ckb_types::core::BlockView;
-use ckb_types::packed;
+use ckb_types::{packed, H256};
 use faster_hex::hex_string;
 use muta_protocol::types as muta_types;
 use serde_json;
@@ -15,14 +15,14 @@ use std::time::Duration;
 type AssetMap = HashMap<String, u128>;
 
 pub struct MutaHandler {
-    relayer_pk:         String,
+    relayer_pk:         H256,
     ckb_client:         HttpRpcClient,
     ckb_indexer_client: IndexerRpcClient,
     ckb_genesis_info:   GenesisInfo,
 }
 
 impl MutaHandler {
-    pub fn new(relayer_pk: String, ckb_url: String, ckb_indexer_url: String) -> Self {
+    pub fn new(relayer_pk: H256, ckb_url: String, ckb_indexer_url: String) -> Self {
         let mut ckb_client = HttpRpcClient::new(ckb_url);
         let block: BlockView = ckb_client
             .get_block_by_number(0)

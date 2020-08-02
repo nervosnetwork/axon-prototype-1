@@ -2,6 +2,7 @@ use crate::muta_server::util::{gen_ckb_message, gen_raw_tx};
 use anyhow::Result;
 use ckb_handler::types::MintSudt;
 use ckb_sdk::rpc::Script;
+use ckb_types::H256;
 use common_crypto::{
     Crypto, PrivateKey, PublicKey, Secp256k1, Secp256k1PrivateKey, Signature, ToPublicKey,
 };
@@ -12,7 +13,7 @@ use std::convert::{TryFrom, TryInto};
 
 pub struct CkbHandler {
     // secret key of relayer_pk, in hex format
-    relayer_sk:       String,
+    relayer_sk:       H256,
     muta_client:      MutaClient,
     cross_lockscript: Script,
     cross_typescript: Script,
@@ -20,7 +21,7 @@ pub struct CkbHandler {
 
 impl CkbHandler {
     pub fn new(
-        relayer_sk: String,
+        relayer_sk: H256,
         muta_url: String,
         cross_lockscript: Script,
         cross_typescript: Script,
@@ -38,15 +39,26 @@ impl CkbHandler {
         ckb_block: ckb_sdk::rpc::BlockView,
     ) -> Result<Vec<muta_types::SignedTransaction>> {
         let mut batch_mints: Vec<MintSudt> = vec![];
+
+        dbg!(ckb_block.transactions.len());
+
+        if ckb_block.transactions.len() > 1 {
+            dbg!("discover lock to cross block");
+        };
+
+        let mut tx_mints = vec![];
         for tx_view in ckb_block.transactions.into_iter() {
-            for (_index, output) in tx_view.inner.outputs.iter().enumerate() {
+            // sum the cross tx and gen tx_mints
+            for (index, output) in tx_view.inner.outputs.iter().enumerate() {
+                dbg!(index, output.type_.is_some());
+
                 if output.type_.is_none() {
                     continue;
                 }
                 // the unlock tx by validators
                 let typescript = output.type_.to_owned().unwrap();
                 if typescript == self.cross_typescript {
-                    batch_mints.clear();
+                    tx_mints.clear();
                     break;
                 }
 
@@ -78,10 +90,11 @@ impl CkbHandler {
                         amount:   u128::from_le_bytes(amount.to_owned()),
                     };
 
-                    batch_mints.push(mint_sudt);
+                    tx_mints.push(mint_sudt);
                     break;
                 }
             }
+            batch_mints.append(&mut tx_mints);
         }
 
         if batch_mints.is_empty() {
@@ -96,8 +109,7 @@ impl CkbHandler {
         let raw_bytes = raw_tx.encode_fixed().unwrap();
         let tx_hash = muta_types::Hash::digest(raw_bytes);
 
-        let bytes = hex::decode(&self.relayer_sk.as_bytes()[2..])?;
-        let privkey = Secp256k1PrivateKey::try_from(bytes.as_slice())?;
+        let privkey = Secp256k1PrivateKey::try_from(self.relayer_sk.as_bytes())?;
         let signature =
             Secp256k1::sign_message(&tx_hash.as_bytes(), &privkey.clone().to_bytes()).unwrap();
 
@@ -118,6 +130,7 @@ impl CkbHandler {
             ckb_block.header.inner.number
         );
         let txs = self.transform(ckb_block)?;
+        dbg!(txs.len());
         for tx in txs {
             let muta_tx_hash = self.muta_client.send_transaction(tx).unwrap();
             dbg!(&muta_tx_hash);

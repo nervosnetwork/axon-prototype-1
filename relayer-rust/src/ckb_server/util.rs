@@ -11,7 +11,7 @@ use ckb_types::{
     H160, H256,
 };
 
-use crate::config::{Loader, RelayerConfig};
+use crate::cfg::{Loader, RelayerConfig};
 use ckb_crypto::secp::{Privkey, SECP256K1};
 use ckb_hash::{blake2b_256, new_blake2b};
 use ckb_jsonrpc_types::{
@@ -38,8 +38,8 @@ pub fn get_privkey_from_hex(privkey_hex: String) -> secp256k1::SecretKey {
     secp256k1::SecretKey::from_slice(&privkey_bytes[..]).unwrap()
 }
 
-pub fn gen_lock_args(privkey_hex: String) -> H160 {
-    let privkey = get_privkey_from_hex(privkey_hex);
+pub fn gen_lock_args(privkey_key: H256) -> H160 {
+    let privkey = secp256k1::SecretKey::from_slice(privkey_key.as_bytes()).unwrap();
     let pubkey = secp256k1::PublicKey::from_secret_key(&SECP256K1, &privkey);
 
     let lock_arg = H160::from_slice(&blake2b_256(&pubkey.serialize()[..])[0..20])
@@ -47,8 +47,8 @@ pub fn gen_lock_args(privkey_hex: String) -> H160 {
     lock_arg
 }
 
-pub fn gen_lock_hash(privkey_hex: String) -> H256 {
-    let lock_args = gen_lock_args(privkey_hex);
+pub fn gen_lock_hash(privkey_key: H256) -> H256 {
+    let lock_args = gen_lock_args(privkey_key);
     let lock_script = gen_lockscript(lock_args);
     let lock_hash: H256 = lock_script.calc_script_hash().unpack();
     println!("lock_hash: {:?}", hex_string(&lock_hash.0[..]));
@@ -71,27 +71,25 @@ pub fn gen_unlock_sudt_tx(
     assets: &mut HashMap<muta_types::Hash, HashMap<String, u128>>,
 ) -> packed::Transaction {
     let relayer_config = Loader::default().load_relayer_config();
-    let validator_privkey_hex = relayer_config["ckb"]["privateKey"]
-        .as_str()
-        .expect("validator private key invalid");
-    let deploy_tx_hash = relayer_config.get_tx_hash("deployTxHash");
-    let crosschain_cell_tx_hash = relayer_config.get_tx_hash("createCrosschainCellTxHash");
+    let validator_privkey = relayer_config.ckb.private_key;
+    let deploy_tx_hash = relayer_config.ckb.deploy_tx_hash;
+    let crosschain_cell_tx_hash = relayer_config.ckb.create_crosschain_cell_tx_hash;
 
     // outpoint
     let sudt_type_out_point = packed::OutPoint::new_builder()
-        .tx_hash(deploy_tx_hash.clone())
+        .tx_hash(deploy_tx_hash.pack())
         .index(0u32.pack())
         .build();
     let cross_type_out_point = packed::OutPoint::new_builder()
-        .tx_hash(deploy_tx_hash.clone())
+        .tx_hash(deploy_tx_hash.pack())
         .index(1u32.pack())
         .build();
     let cross_lock_out_point = packed::OutPoint::new_builder()
-        .tx_hash(deploy_tx_hash.clone())
+        .tx_hash(deploy_tx_hash.pack())
         .index(2u32.pack())
         .build();
     let crosschain_cell_out_point = packed::OutPoint::new_builder()
-        .tx_hash(crosschain_cell_tx_hash.clone())
+        .tx_hash(crosschain_cell_tx_hash.pack())
         .index(1u32.pack())
         .build();
 
@@ -121,10 +119,10 @@ pub fn gen_unlock_sudt_tx(
         .build();
 
     // lockscript && typescript
-    let cross_lockscript: Script = relayer_config.get_script("crosschainLockscript");
-    let validators_lockscript: Script = relayer_config.get_script("validatorsLockscript");
-    let cross_typescript: Script = relayer_config.get_script("crosschainTypescript");
-    let sudt_typescript: Script = relayer_config.get_script("udtScript");
+    let cross_lockscript: Script = relayer_config.ckb.crosschain_lockscript;
+    let validators_lockscript: Script = relayer_config.ckb.validators_lockscript;
+    let cross_typescript: Script = relayer_config.ckb.crosschain_typescript;
+    let sudt_typescript: Script = relayer_config.ckb.udt_script;
 
     // get input from crosschainCell
     let input = packed::CellInput::new_builder()
@@ -207,7 +205,7 @@ pub fn gen_unlock_sudt_tx(
     if outputs_capacity + TX_FEE > inputs_capacity {
         let need_capacity = outputs_capacity + TX_FEE - inputs_capacity;
 
-        let lock_args = gen_lock_args(validator_privkey_hex.to_owned());
+        let lock_args = gen_lock_args(validator_privkey.clone());
         let (inputs_payer, payer_given_capacity, lock_payer) =
             collect_live_inputs(ckb_indexer_client, need_capacity, lock_args);
         inputs.extend(inputs_payer);
@@ -241,8 +239,7 @@ pub fn gen_unlock_sudt_tx(
         .build();
 
     // sign
-    let bytes = hex::decode(&validator_privkey_hex.as_bytes()[2..]).unwrap();
-    let privkey = Privkey::from_slice(bytes.as_ref());
+    let privkey = Privkey::from_slice(validator_privkey.as_bytes());
     let tx = sign_tx(tx, &privkey);
     tx.data()
 }
