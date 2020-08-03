@@ -374,7 +374,7 @@ async function issueSUDT() {
   console.log(`issue sudt hash: ${txHash}`);
 }
 
-async function lockToCrosschainContract() {
+async function lockToCrosschainContract(amount) {
   const secp256k1Dep = await ckb.loadSecp256k1Dep();
 
   // user b
@@ -436,7 +436,7 @@ async function lockToCrosschainContract() {
       mutaCrosschainMsgWitness
     ],
     outputsData: [
-      utils.toHexInLittleEndian("0x" + Number(100000000).toString(16), 16)
+      utils.toHexInLittleEndian("0x" + Number(amount).toString(16), 16)
     ]
   };
   // console.log(JSON.stringify(transaction, null, 2));
@@ -467,7 +467,7 @@ async function waitForTx(txHash) {
     } catch (e) {
       console.log({ e, tx, txHash });
     }
-    await delay(1000);
+    await delay(3000);
   }
 }
 
@@ -512,7 +512,7 @@ async function waitForLockToLockscript() {
       type: 'input',
       name: 'lockscript',
       message:
-          `Enter return to lock sudt to crosschain lockscript`,
+          `relay_config generated, please start the relayer\nEnter return to lock sudt to crosschain lockscript`,
       validate: (value) => {
         return true;
       }
@@ -574,7 +574,7 @@ async function get_tx_receipt(txHash) {
   return data ? data.getReceipt : null
 }
 
-async function burn_sudt(tip_height) {
+async function burn_sudt(tip_height, amount) {
   const sudtId = config.udtScript.args
   let txHash = await fetch(relayerConfig.muta.endpoint, {
     "headers": {
@@ -584,7 +584,7 @@ async function burn_sudt(tip_height) {
     },
     "referrer": "http://0.0.0.0:8000/graphiql",
     "referrerPolicy": "no-referrer-when-downgrade",
-    "body": `{\"operationName\":\"burn_sudt\",\"variables\":{},\"query\":\"mutation burn_sudt {\\n  unsafeSendTransaction(inputRaw: {serviceName: \\\"ckb_sudt\\\", method: \\\"burn_sudt\\\", payload: \\\"{\\\\\\\"id\\\\\\\": \\\\\\"${sudtId}\\\\\\", \\\\\\\"receiver\\\\\\\": \\\\\\\"0xaaaade6c26706c095dcacde9e5c34b0b6160f3b8fe76264a1fa8f0bde756b191\\\\\\\", \\\\\\\"amount\\\\\\\": 3}\\\", timeout: \\\"${tip_height}\\\", nonce: \\\"0x9db2d7efe2b61a88827e4836e2775d913a442ed2f9096ca1233e479607c27cf7\\\", chainId: \\\"0xb6a4d7da21443f5e816e8700eea87610e6d769657d6b8ec73028457bf2ca4036\\\", cyclesPrice: \\\"0x9\\\", cyclesLimit: \\\"0x99999\\\"}, inputPrivkey: \\\"0x30269d47fcf602b889243722b666881bf953f1213228363d34cf04ddcd51dfd2\\\")\\n}\\n\"}`,
+    "body": `{\"operationName\":\"burn_sudt\",\"variables\":{},\"query\":\"mutation burn_sudt {\\n  unsafeSendTransaction(inputRaw: {serviceName: \\\"ckb_sudt\\\", method: \\\"burn_sudt\\\", payload: \\\"{\\\\\\\"id\\\\\\\": \\\\\\"${sudtId}\\\\\\", \\\\\\\"receiver\\\\\\\": \\\\\\\"0xaaaade6c26706c095dcacde9e5c34b0b6160f3b8fe76264a1fa8f0bde756b191\\\\\\\", \\\\\\\"amount\\\\\\\": ${amount}\\\", timeout: \\\"${tip_height}\\\", nonce: \\\"0x9db2d7efe2b61a88827e4836e2775d913a442ed2f9096ca1233e479607c27cf7\\\", chainId: \\\"0xb6a4d7da21443f5e816e8700eea87610e6d769657d6b8ec73028457bf2ca4036\\\", cyclesPrice: \\\"0x9\\\", cyclesLimit: \\\"0x99999\\\"}, inputPrivkey: \\\"0x30269d47fcf602b889243722b666881bf953f1213228363d34cf04ddcd51dfd2\\\")\\n}\\n\"}`,
     "method": "POST",
     "mode": "cors"
   }).then(res => res.json()).then(json => {
@@ -610,14 +610,55 @@ async function get_block_hook_receipt(height) {
   }).then(res => res.json()).then(json => json.data.getBlockHookReceipt).then(console.log);
 }
 
-async function burnSudtToMuta() {
+async function burnSudtToMuta(amount) {
   // muta crosschain to ckb
   let tip_height = await get_tip_height();
   console.log("user call ckb-sudt to burn sudt and get burn-sudt-proof:\n");
 
   console.log("sending tx and get txHash:\n");
-  const txHash = await burn_sudt(tip_height);
+  const txHash = await burn_sudt(tip_height, amount);
   console.log(txHash);
+}
+
+async function getUdtAmountFromCkb(lockHash, sudt_id) {
+  const unspentCells = (await ckb.loadCells({
+    lockHash
+  })).filter(cell => cell.type && cell.type.args === sudt_id);
+
+  let sum = 0n;
+  for (let i = 0; i < unspentCells.length; i++) {
+    let cell = unspentCells[i];
+    const cellInfo = await ckb.rpc.getLiveCell(cell.outPoint, true);
+    // console.log(cellInfo);
+    const amountRaw = cellInfo.cell.data.content;
+    const amount = LittleEndianHexToNum(amountRaw);
+    sum += amount;
+  }
+  return sum;
+}
+
+async function getUdtAmountFromMuta(sudt_id, address) {
+  const res = await fetch(relayerConfig.muta.endpoint, {
+    "headers": {
+      "accept": "*/*",
+      "accept-language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7,lb;q=0.6",
+      "content-type": "application/json"
+    },
+    "referrer": "http://0.0.0.0:8000/graphiql",
+    "referrerPolicy": "no-referrer-when-downgrade",
+    "body": `{"operationName":null,"variables":{},"query":"{\\n  queryService(cyclesLimit: \\"0x123456\\", cyclesPrice: \\"0x123456\\", caller: \\"0x016cbd9ee47a255a6f68882918dcdd9e14e6bee1\\", serviceName: \\"ckb_sudt\\", method: \\"get_balance\\", payload: \\"{\\\\\\"id\\\\\\":\\\\\\"${sudt_id}\\\\\\",\\\\\\"user\\\\\\":\\\\\\"${address}\\\\\\"}\\") {\\n    code\\n    succeedData\\n    errorMessage\\n  }\\n}\\n"}`,
+    "method": "POST",
+    "mode": "cors"
+  });
+
+  const data = (await res.json()).data
+  if (!data) {
+    return null;
+  }
+
+  console.log( data.queryService.succeedData );
+  const obj = JSON.parse( data.queryService.succeedData );
+  return BigInt(obj.balance);
 }
 
 async function main() {
@@ -634,14 +675,35 @@ async function main() {
   await waitForTx(config.issueTxHash);
 
   await storeConfigToRelayer(config)
-  await waitForLockToLockscript()
 
-  await lockToCrosschainContract();
+
+  const lockhash = relayerConfig.ckb.crosschainLockscriptHash;
+  const sudt_id = relayerConfig.ckb.udtScript.args;
+  const amount = 100000000;
+  console.log("sudt_id: " + sudt_id);
+  console.log("lockhash: " + lockhash, "  balance: "+ await getUdtAmountFromCkb(lockhash, sudt_id));
+  console.log("lock amount to crosschain: " + amount );
+  await waitForLockToLockscript()
+  await lockToCrosschainContract(amount);
+
   await waitForTx(config.lockToCrosschainTxHash);
+  console.log("lockhash: " + lockhash, "  balance: "+ await getUdtAmountFromCkb(lockhash, sudt_id));
+
+  console.log("\nmuta balance: ");
+  await getUdtAmountFromMuta(sudt_id, relayerConfig.muta.address);
 
   await waitForBurnSudt()
-  await burnSudtToMuta()
 
+  const burn_amount = 3;
+  await burnSudtToMuta(burn_amount);
+
+  console.log("burn sudt amount from muta to ckb: " + burn_amount);
+  console.log("waiting for burnSudtTx committed on muta")
+  await delay(5000);
+  console.log("\nmuta balance: ");
+  await getUdtAmountFromMuta(sudt_id, relayerConfig.muta.address);
+
+  console.log("lockhash: " + lockhash, "  balance: "+ await getUdtAmountFromCkb(lockhash, sudt_id));
 }
 
 module.exports = {main, burnSudtToMuta}
