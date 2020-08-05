@@ -4,6 +4,9 @@ COMMIT := $(shell git rev-parse --short HEAD)
 
 CARGO := env ${SYS_ROCKSDB} cargo
 
+run:
+	cargo run --package relayer-rust --bin relayer-rust
+
 test:
 	${CARGO} test ${VERBOSE} --all -- --nocapture
 

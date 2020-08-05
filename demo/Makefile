@@ -1,5 +1,5 @@
 demo:
-	yarn node src/centralized_crosschain_demo.js
+	yarn node src/demo.js
 
 schema:
 	mkdir -p build/

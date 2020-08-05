@@ -3,43 +3,47 @@
 const CKB = require("@nervosnetwork/ckb-sdk-core").default;
 const utils = require("@nervosnetwork/ckb-sdk-utils");
 const ECPair = require("@nervosnetwork/ckb-sdk-utils/lib/ecpair");
-const process = require("process");
+const fetch = require("node-fetch");
 const fs = require("fs");
+const path = require("path");
 const _ = require("lodash");
-const cc = require("../build/centralized_crosschain");
-const toolkit = require("ckb-js-toolkit");
-const Reader = toolkit.Reader;
+const toml = require('toml');
+const json2toml = require('json2toml');
 
-// const duktapeBinary = fs.readFileSync("./deps/load0");
-// const duktapeHash = blake2b(duktapeBinary);
-const simpleUdtBinary = fs.readFileSync("./deps/simple_udt");
+const simpleUdtBinary = fs.readFileSync(path.join(__dirname, "../deps/simple_udt"));
 const simpleUdtHash = blake2b(simpleUdtBinary);
-const crosschainTypescript = fs.readFileSync("../ckb-contracts/build/centralized_crosschain_typescript");
-// const crosschainTypescript = fs.readFileSync("./deps/always_success");
+const crosschainTypescript = fs.readFileSync(path.join(__dirname, "../../ckb-contracts-rust/build/debug/crosschain-v2"));
 const crosschainTypescriptHash = blake2b(crosschainTypescript);
-const crosschainLockscript = fs.readFileSync("../ckb-contracts/build/centralized_crosschain_lockscript");
+const crosschainLockscript = fs.readFileSync(path.join(__dirname, "../../ckb-contracts-rust/build/debug/lockscript"));
 const crosschainLockscriptHash = blake2b(crosschainLockscript);
 
-const privateKey =
-  "0xd00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2bc";
+
 const bPrivKey =
   "0xd00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2b0";
-const nodeUrl = "http://127.0.0.1:8114/";
-const configPath = "./build/config.json";
+
+const relayerConfigPath = path.join(__dirname, "../../relayer-rust/relayer_config.json");
+const relayerConfigPathToml = path.join(__dirname, "../../relayer-rust/relayer_config.toml");
+// const relayerConfig = JSON.parse(fs.readFileSync(relayerConfigPath));
+const relayerConfig = {
+  ckb:{
+    url: "http://192.168.10.2:8114",
+    url_indexer: "http://192.168.10.2:8116",
+    privateKey: "0xd00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2bc",
+  },
+  muta:{
+    endpoint: "http://192.168.10.2:8000/graphql",
+    address: "0x016cbd9ee47a255a6f68882918dcdd9e14e6bee1",
+    privateKey: "0x30269d47fcf602b889243722b666881bf953f1213228363d34cf04ddcd51dfd2"
+  },
+};
+
+const privateKey = relayerConfig.ckb.privateKey;
+const nodeUrl = relayerConfig.ckb.url;
+const inquirer = require("inquirer")
+
 let config = {};
-try {
-  config = JSON.parse(fs.readFileSync(configPath));
-} catch (err) {
-  console.error("config not exit yet");
-}
 const fee = 100000000n;
-
 const ckb = new CKB(nodeUrl);
-
-process.on("exit", code => {
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-  console.log(`About to exit with code: ${code}, save config success`);
-});
 
 function blake2b(buffer) {
   return utils
@@ -79,6 +83,26 @@ function signMsg(msg, sk) {
   return sig;
 }
 
+function snakifyKeys(fields) {
+  // because this function can receive map of ArrayNodes, we have to do this
+  let jsonFields = JSON.parse(JSON.stringify(fields));
+
+  for (let key in jsonFields) {
+    if (jsonFields[key] instanceof Object) {
+      // we need to go deeper!
+      jsonFields[key] = snakifyKeys(jsonFields[key]);
+    }
+
+    let snakeKey = key.replace(/\.?([A-Z]+)/g, function(x, y) {return '_' + y.toLowerCase();}).replace(/^_/, '');
+    jsonFields[snakeKey] = jsonFields[key];
+    // remove the unwanted camelCase key
+    if (snakeKey !== key) {
+      delete jsonFields[key];
+    }
+  }
+  return jsonFields;
+}
+
 async function deploy(code_list) {
   const secp256k1Dep = await ckb.loadSecp256k1Dep();
   const publicKey = ckb.utils.privateKeyToPublicKey(privateKey);
@@ -90,9 +114,11 @@ async function deploy(code_list) {
   };
   const lockHash = ckb.utils.scriptToHash(lockScript);
 
-  const unspentCells = await ckb.loadCells({
+  const unspentCells = (await ckb.loadCells({
     lockHash
-  });
+  })).filter(cell => !cell.type
+  );
+
   const totalCapacity = unspentCells.reduce(
     (sum, cell) => sum + BigInt(cell.capacity),
     BigInt(0)
@@ -171,46 +197,33 @@ async function createCrosschainCell() {
   };
   const lockHash = ckb.utils.scriptToHash(lockScript);
 
-  const unspentCells = await ckb.loadCells({
+  // crosschain-v2
+  config.validatorsLockscript = lockScript
+
+  const unspentCells = (await ckb.loadCells({
     lockHash
-  });
+  })).filter(cell => !cell.type
+  );
+
   const totalCapacity = unspentCells.reduce(
     (sum, cell) => sum + BigInt(cell.capacity),
     BigInt(0)
   );
 
   const CellCapacity = 20000000000000n;
-
-  //   console.log(unspentCells[0]);
-  const argsObj = unspentCells[0].outPoint;
-  console.log(argsObj);
-  const args_ab = cc.SerializeOutPoint({
-    tx_hash: new Reader(argsObj.txHash),
-    index: intToUint32(argsObj.index),
-  })
-  const args = (new Reader(args_ab)).serializeJson();
-
-  // init cell data as pubkey hash of validator
-  const cc_data_raw = {
-    pubkey_hash: new Reader(publicKeyHash),
-  }
-  const cc_data_ab = cc.SerializeCrosschainData(cc_data_raw);
-  const cc_data_reader = new Reader(cc_data_ab);
-  const cellData = cc_data_reader.serializeJson();
+  // init cell data in crosschain-v2, just used as placeholder
+  const cellData = "0x";
   config.crosschainCellData = cellData;
-  console.log({argsObj, args, publicKeyHash, cellData});
-
   config.crosschainTypescript = {
     codeHash: utils.bytesToHex(crosschainTypescriptHash),
     hashType: "data",
-    args
+    args: lockHash
   };
   config.crosschainLockscript = {
     codeHash: utils.bytesToHex(crosschainLockscriptHash),
     hashType: "data",
     args: utils.scriptToHash(config.crosschainTypescript)
   };
-  // const { witness, witness_hex } = gen_witness();
   const transaction = {
     version: "0x0",
     cellDeps: [
@@ -246,7 +259,7 @@ async function createCrosschainCell() {
       },
       {
         type: config.crosschainTypescript,
-        lock: config.crosschainLockscript,
+        lock: config.validatorsLockscript,
         capacity: "0x" + CellCapacity.toString(16)
       }
     ],
@@ -259,11 +272,7 @@ async function createCrosschainCell() {
     ],
     outputsData: ["0x", cellData]
   };
-  //   console.log(JSON.stringify(transaction, null, 2))
   const signedTransaction = ckb.signTransaction(privateKey)(transaction);
-  // console.log(JSON.stringify(signedTransaction, null, 2))
-  // console.log({ witness_len: witness_hex.length / 2 - 1 })
-
   const txHash = await ckb.rpc.sendTransaction(
     signedTransaction,
     "passthrough"
@@ -295,9 +304,10 @@ async function issueSUDT() {
   };
   const bLockHash = ckb.utils.scriptToHash(bLockScript);
 
-  const unspentCells = await ckb.loadCells({
+  const unspentCells = (await ckb.loadCells({
     lockHash
-  });
+  })).filter(cell => !cell.type);
+
   const totalCapacity = unspentCells.reduce(
     (sum, cell) => sum + BigInt(cell.capacity),
     BigInt(0)
@@ -364,7 +374,7 @@ async function issueSUDT() {
   console.log(`issue sudt hash: ${txHash}`);
 }
 
-async function lockToCrosschainContract() {
+async function lockToCrosschainContract(amount) {
   const secp256k1Dep = await ckb.loadSecp256k1Dep();
 
   // user b
@@ -381,7 +391,7 @@ async function lockToCrosschainContract() {
   //     amount: 100,
   //   };
   //   const mutaCrosschainMsgWitness = str2hex(JSON.stringify(mutaCrosschainMsg));
-  const mutaCrosschainMsgWitness = "0xcff1002107105460941f797828f468667aa1a2db";
+  const mutaCrosschainMsgWitness = relayerConfig.muta.address;
 
   const CellCapacity = 200000000000n;
 
@@ -426,7 +436,7 @@ async function lockToCrosschainContract() {
       mutaCrosschainMsgWitness
     ],
     outputsData: [
-      utils.toHexInLittleEndian("0x" + Number(100000000).toString(16), 16)
+      utils.toHexInLittleEndian("0x" + Number(amount).toString(16), 16)
     ]
   };
   // console.log(JSON.stringify(transaction, null, 2));
@@ -439,196 +449,6 @@ async function lockToCrosschainContract() {
   );
   console.log(`lockToCrosschain hash: ${txHash}`);
   config.lockToCrosschainTxHash = txHash;
-  return txHash;
-}
-
-async function unlockCrosschainContract() {
-  const secp256k1Dep = await ckb.loadSecp256k1Dep();
-  // read from the crosschain cell data
-  const fee_rate = 100000n;
-  const { witness, witness_hex } = gen_witness();
-  const balance = new Object();
-  const assetBalanceSum = {};
-  const blocks = witness.messages;
-  for (let i = 0; i < blocks.length; i++) {
-    const events = blocks[i].events;
-    for (let j = 0; j < events.length; j++) {
-      const event = events[j];
-      let asset = balance[event.asset_id] || {};
-      asset[event.ckb_receiver] =
-        asset[event.ckb_receiver] || BigInt(0) + BigInt(event.amount);
-      balance[event.asset_id] = asset;
-      assetBalanceSum[event.asset_id] =
-        (assetBalanceSum[event.asset_id] || BigInt(0)) + BigInt(event.amount);
-
-      console.log({ event, assetBalanceSum });
-    }
-  }
-
-  // const fee_receiver = witness.fee_receiver;
-  const fee_receiver = '0x0000000000000000000000000000000000000000000000000000000000000005';
-  for (let asset_id in balance) {
-    let fee_total = BigInt(0);
-    let asset = balance[asset_id];
-    for (let receiver in asset) {
-      let fee = (asset[receiver] * fee_rate) / 100000000n;
-      fee_total += fee;
-      asset[receiver] -= fee;
-    }
-    asset[fee_receiver] = fee_total;
-  }
-  console.log({ balance, assetBalanceSum });
-
-  const crosschainLockCells = await ckb.loadCells({
-    lockHash: ckb.utils.scriptToHash(config.crosschainLockscript)
-  });
-  // console.log(JSON.stringify(crosschainLockCells, null, 2));
-
-  const crosschainCell = _.find(
-    crosschainLockCells,
-    c => c.type.codeHash === config.crosschainTypescript.codeHash
-  );
-  // console.log(crosschainCell);
-
-  const inputs = [
-    {
-      previousOutput: crosschainCell.outPoint,
-      since: "0x0"
-    }
-  ];
-  let totalCapacity = BigInt(crosschainCell.capacity);
-  const udtHashHex = utils.bytesToHex(simpleUdtHash);
-  const backToCrosschainBalance = {};
-  console.log({ assetBalanceSum });
-  for (let i = 0; i < crosschainLockCells.length; i++) {
-    const c = crosschainLockCells[i];
-    const udtArgs = c.type.args;
-    if (c.type.codeHash !== udtHashHex || assetBalanceSum[udtArgs] === null) {
-      continue;
-    }
-    const cellInfo = await ckb.rpc.getLiveCell(c.outPoint, true);
-    // console.log(cellInfo);
-    const amountRaw = cellInfo.cell.data.content;
-    const amount = LittleEndianHexToNum(amountRaw);
-    console.log(amount);
-    totalCapacity += BigInt(cellInfo.cell.output.capacity);
-    inputs.push({
-      previousOutput: c.outPoint,
-      since: "0x0"
-    });
-    if (amount >= assetBalanceSum[udtArgs]) {
-      backToCrosschainBalance[udtArgs] = amount - assetBalanceSum[udtArgs];
-      assetBalanceSum[udtArgs] = null;
-    } else {
-      assetBalanceSum[udtArgs] -= amount;
-    }
-  }
-  // console.log({ backToCrosschainBalance });
-
-  // console.log(totalCapacity);
-
-  const outputs = [
-    {
-      lock: crosschainCell.lock,
-      type: crosschainCell.type
-    }
-  ];
-  // TODO: transform the crosschain cell data
-  const outputsData = [config.crosschainCellData];
-
-  const udtCellCapacity = 16n * 100000000n + 14100000000n;
-  for (const [asset_id, asset] of Object.entries(balance)) {
-    let asset = balance[asset_id];
-    for (const [receiver, amount] of Object.entries(asset)) {
-      let amount = asset[receiver];
-      outputs.push({
-        lock: {
-          args: receiver,
-          hashType: secp256k1Dep.hashType,
-          codeHash: secp256k1Dep.codeHash
-        },
-        type: {
-          hashType: "data",
-          codeHash: utils.bytesToHex(simpleUdtHash),
-          args: asset_id
-        }
-      });
-      outputsData.push(utils.toHexInLittleEndian(amount, 16));
-    }
-  }
-  for (const [asset_id, backAmount] of Object.entries(
-    backToCrosschainBalance
-  )) {
-    outputs.push({
-      lock: config.crosschainLockscript,
-      type: {
-        hashType: "data",
-        codeHash: utils.bytesToHex(simpleUdtHash),
-        args: asset_id
-      }
-    });
-    outputsData.push(utils.toHexInLittleEndian(backAmount, 16));
-  }
-  for (let i = 0; i < outputs.length; i++) {
-    if (i === 0) {
-      outputs[i].capacity =
-        "0x" +
-        (
-          totalCapacity -
-          udtCellCapacity * BigInt(outputs.length - 1) -
-          fee
-        ).toString(16);
-    } else {
-      outputs[i].capacity = "0x" + udtCellCapacity.toString(16);
-    }
-  }
-  // console.log({ outputsData, outputs });
-  // console.log(outputsData.slice(1).map(a => LittleEndianHexToNum(a)));
-  // console.log(_.sum(outputsData.slice(1).map(a => LittleEndianHexToNum(a))));
-
-  const transaction = {
-    version: "0x0",
-    cellDeps: [
-      {
-        outPoint: {
-          txHash: config.deployTxHash,
-          index: "0x0"
-        },
-        depType: "code"
-      },
-      {
-        outPoint: {
-          txHash: config.deployTxHash,
-          index: "0x1"
-        },
-        depType: "code"
-      },
-      {
-        outPoint: {
-          txHash: config.deployTxHash,
-          index: "0x2"
-        },
-        depType: "code"
-      },
-      {
-        outPoint: secp256k1Dep.outPoint,
-        depType: "depGroup"
-      }
-    ],
-    headerDeps: [],
-    inputs,
-    outputs,
-    // TODO: witness should encode to molecula
-    witnesses: [witness_hex],
-    outputsData
-    // outputsData: [
-    //   utils.toHexInLittleEndian("0x" + Number(100000000).toString(16), 16)
-    // ]
-  };
-  console.log(JSON.stringify(transaction, null, 2));
-  const txHash = await ckb.rpc.sendTransaction(transaction, "passthrough");
-  console.log(`lockToCrosschain hash: ${txHash}`);
-  config.unlockTxHash = txHash;
   return txHash;
 }
 
@@ -647,7 +467,7 @@ async function waitForTx(txHash) {
     } catch (e) {
       console.log({ e, tx, txHash });
     }
-    await delay(1000);
+    await delay(3000);
   }
 }
 
@@ -663,72 +483,182 @@ function intToUint32(n) {
   return (new Uint8Array(buf)).buffer;
 }
 
-function gen_witness() {
-  const witness = {
-    messages: [
-      {
-        header: {
-          height: 100n,
-        },
-        events: [
-          {
-            asset_id:
-                "0x32e555f3ff8e135cece1351a6a2971518392c1e30375c1e006ad0ce8eac07947",
-            ckb_receiver:
-                "0x0000000000000000000000000000000000000000000000000000000000000001",
-            amount: 10000n,
-          },
-          {
-            asset_id:
-                "0x32e555f3ff8e135cece1351a6a2971518392c1e30375c1e006ad0ce8eac07947",
-            ckb_receiver:
-                "0x0000000000000000000000000000000000000000000000000000000000000002",
-            amount: 20000n,
-          }
-        ],
+async function storeConfigToRelayer(config) {
+  // store sudt_id that was arg of udtScript.args
+  if (!relayerConfig.sudtIDs){
+    relayerConfig.sudtIDs = []
+  }
+  if (relayerConfig.sudtIDs.indexOf(config.udtScript.args) === -1) {
+    relayerConfig.sudtIDs.push( config.udtScript.args );
+  }
+
+  // calcute scriptHash
+  config.crosschainLockscriptHash = utils.scriptToHash(config.crosschainLockscript)
+  config.crosschainTypescriptHash = utils.scriptToHash(config.crosschainTypescript)
+  config.udtScriptHash = utils.scriptToHash(config.udtScript)
+
+  // store config to relayerConfig
+  for (const key in config) {
+    relayerConfig.ckb[key] = config[key]
+  }
+  fs.writeFileSync(relayerConfigPath, JSON.stringify(relayerConfig, null, 2));
+  fs.writeFileSync(relayerConfigPathToml, json2toml(snakifyKeys(relayerConfig)));
+  await delay(2000)
+}
+
+async function waitForLockToLockscript() {
+  const questions = [
+    {
+      type: 'input',
+      name: 'lockscript',
+      message:
+          `relay_config generated, please start the relayer\nEnter return to lock sudt to crosschain lockscript`,
+      validate: (value) => {
+        return true;
       }
-    ],
-    proof: "0x0800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009",
-  };
+    }
+  ];
 
-
-  const messages_ab = cc.SerializeMessageVec(witness.messages.map(a => transformMessage(a)));
-  const messages_hex = (new Reader(messages_ab)).serializeJson();
-
-  witness.proof = signMsg(messages_hex);
-
-  const witness_transformed = transformWitness(witness);
-  const witness_ab = cc.SerializeCrosschainWitness(witness_transformed);
-  const witness_reader = new Reader(witness_ab);
-  const witness_hex = witness_reader.serializeJson();
-  const result = {witness, witness_ab, witness_reader, witness_hex};
-  console.log({result, messages_hex, proof: witness.proof});
-  return result;
+  await inquirer.prompt(questions).then(answers => ({}));
 }
 
-function transformEvent(event) {
-  return {
-    asset_id: new Reader(event.asset_id),
-    ckb_receiver: new Reader(event.ckb_receiver),
-    amount: bigintToUint64(event.amount),
-  }
+async function waitForBurnSudt() {
+  const questions = [
+    {
+      type: 'input',
+      name: 'burnSudt',
+      message: `Enter return to send burn_sudt to muta, then unlocking the sudt from ckb`,
+      validate: (value) => {
+        return true;
+      }
+    }
+  ];
+
+  await inquirer.prompt(questions).then(answers => ({}));
 }
 
-function transformMessage(message) {
-  console.log({message});
-  return {
-    header: {
-      height: bigintToUint64(message.header.height),
+async function get_tip_height() {
+  const height = await fetch(relayerConfig.muta.endpoint, {
+    "headers": {
+      "accept": "*/*",
+      "accept-language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7,lb;q=0.6",
+      "content-type": "application/json"
     },
-    events: message.events.map(a => transformEvent(a)),
-  }
+    "referrer": "http://0.0.0.0:8000/graphiql",
+    "referrerPolicy": "no-referrer-when-downgrade",
+    "body": "{\"operationName\":null,\"variables\":{},\"query\":\"{\\n  getBlock(height: null) {\\n    header {\\n      height\\n    }\\n  }\\n}\\n\"}",
+    "method": "POST",
+    "mode": "cors",
+    "credentials": "omit"
+  }).then(res => res.json()).then(json => json.data.getBlock.header.height).then(height => parseInt(height, 16) + 19).then(height => '0x' + height.toString(16)).then(height => {
+    return height
+  });
+
+  return height;
 }
 
-function transformWitness(witness) {
-  return {
-    messages: witness.messages.map(a => transformMessage(a)),
-    proof: new Reader(witness.proof)
+async function get_tx_receipt(txHash) {
+  const res = await fetch(relayerConfig.muta.endpoint, {
+    "headers": {
+      "accept": "*/*",
+      "accept-language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7,lb;q=0.6",
+      "content-type": "application/json"
+    },
+    "referrer": "http://0.0.0.0:8000/graphiql",
+    "referrerPolicy": "no-referrer-when-downgrade",
+    "body": `{\"operationName\":null,\"variables\":{},\"query\":\"{\\n  getReceipt(txHash: \\\"${txHash}\\\") {\\n    height\\n    response {\\n      serviceName\\n      response {\\n        code\\n        succeedData\\n        errorMessage\\n      }\\n    }\\n    events {\\n      data\\n      topic\\n      service\\n    }\\n  }\\n}\\n\"}`,
+    "method": "POST",
+    "mode": "cors"
+  });
+  const data = (await res.json()).data
+  return data ? data.getReceipt : null
+}
+
+async function burn_sudt(tip_height, amount) {
+  const sudtId = config.udtScript.args
+  let txHash = await fetch(relayerConfig.muta.endpoint, {
+    "headers": {
+      "accept": "*/*",
+      "accept-language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7,lb;q=0.6",
+      "content-type": "application/json"
+    },
+    "referrer": "http://0.0.0.0:8000/graphiql",
+    "referrerPolicy": "no-referrer-when-downgrade",
+    "body": `{\"operationName\":\"burn_sudt\",\"variables\":{},\"query\":\"mutation burn_sudt {\\n  unsafeSendTransaction(inputRaw: {serviceName: \\\"ckb_sudt\\\", method: \\\"burn_sudt\\\", payload: \\\"{\\\\\\\"id\\\\\\\": \\\\\\"${sudtId}\\\\\\", \\\\\\\"receiver\\\\\\\": \\\\\\\"0xaaaade6c26706c095dcacde9e5c34b0b6160f3b8fe76264a1fa8f0bde756b191\\\\\\\", \\\\\\\"amount\\\\\\\": ${amount}\\\", timeout: \\\"${tip_height}\\\", nonce: \\\"0x9db2d7efe2b61a88827e4836e2775d913a442ed2f9096ca1233e479607c27cf7\\\", chainId: \\\"0xb6a4d7da21443f5e816e8700eea87610e6d769657d6b8ec73028457bf2ca4036\\\", cyclesPrice: \\\"0x9\\\", cyclesLimit: \\\"0x99999\\\"}, inputPrivkey: \\\"0x30269d47fcf602b889243722b666881bf953f1213228363d34cf04ddcd51dfd2\\\")\\n}\\n\"}`,
+    "method": "POST",
+    "mode": "cors"
+  }).then(res => res.json()).then(json => {
+    return json.data.unsafeSendTransaction;
+  });
+
+  return txHash;
+}
+
+async function get_block_hook_receipt(height) {
+  await fetch(relayerConfig.muta.endpoint, {
+    "headers": {
+      "accept": "*/*",
+      "accept-language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7,lb;q=0.6",
+      "content-type": "application/json"
+    },
+    "referrer": "http://0.0.0.0:8000/graphiql",
+    "referrerPolicy": "no-referrer-when-downgrade",
+    "body": `{\"operationName\":null,\"variables\":{},\"query\":\"{\\n  getBlockHookReceipt(height: \\\"${height}\\\") {\\n    height\\n    events {\\n      data\\n      topic\\n      service\\n    }\\n    stateRoot\\n  }\\n}\\n\"}`,
+    "method": "POST",
+    "mode": "cors",
+    "credentials": "omit"
+  }).then(res => res.json()).then(json => json.data.getBlockHookReceipt).then(console.log);
+}
+
+async function burnSudtToMuta(amount) {
+  // muta crosschain to ckb
+  let tip_height = await get_tip_height();
+  console.log("user call ckb-sudt to burn sudt and get burn-sudt-proof:\n");
+
+  console.log("sending tx and get txHash:\n");
+  const txHash = await burn_sudt(tip_height, amount);
+  console.log(txHash);
+}
+
+async function getUdtAmountFromCkb(lockHash, sudt_id) {
+  const unspentCells = (await ckb.loadCells({
+    lockHash
+  })).filter(cell => cell.type && cell.type.args === sudt_id);
+
+  let sum = 0n;
+  for (let i = 0; i < unspentCells.length; i++) {
+    let cell = unspentCells[i];
+    const cellInfo = await ckb.rpc.getLiveCell(cell.outPoint, true);
+    // console.log(cellInfo);
+    const amountRaw = cellInfo.cell.data.content;
+    const amount = LittleEndianHexToNum(amountRaw);
+    sum += amount;
   }
+  return sum;
+}
+
+async function getUdtAmountFromMuta(sudt_id, address) {
+  const res = await fetch(relayerConfig.muta.endpoint, {
+    "headers": {
+      "accept": "*/*",
+      "accept-language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7,lb;q=0.6",
+      "content-type": "application/json"
+    },
+    "referrer": "http://0.0.0.0:8000/graphiql",
+    "referrerPolicy": "no-referrer-when-downgrade",
+    "body": `{"operationName":null,"variables":{},"query":"{\\n  queryService(cyclesLimit: \\"0x123456\\", cyclesPrice: \\"0x123456\\", caller: \\"0x016cbd9ee47a255a6f68882918dcdd9e14e6bee1\\", serviceName: \\"ckb_sudt\\", method: \\"get_balance\\", payload: \\"{\\\\\\"id\\\\\\":\\\\\\"${sudt_id}\\\\\\",\\\\\\"user\\\\\\":\\\\\\"${address}\\\\\\"}\\") {\\n    code\\n    succeedData\\n    errorMessage\\n  }\\n}\\n"}`,
+    "method": "POST",
+    "mode": "cors"
+  });
+
+  const data = (await res.json()).data
+  if (!data) {
+    return null;
+  }
+
+  console.log( data.queryService.succeedData );
+  const obj = JSON.parse( data.queryService.succeedData );
+  return BigInt(obj.balance);
 }
 
 async function main() {
@@ -743,13 +673,37 @@ async function main() {
   await waitForTx(config.createCrosschainCellTxHash);
   await issueSUDT();
   await waitForTx(config.issueTxHash);
-  await lockToCrosschainContract();
+
+  await storeConfigToRelayer(config)
+
+
+  const lockhash = relayerConfig.ckb.crosschainLockscriptHash;
+  const sudt_id = relayerConfig.ckb.udtScript.args;
+  const amount = 100000000;
+  console.log("sudt_id: " + sudt_id);
+  console.log("lockhash: " + lockhash, "  balance: "+ await getUdtAmountFromCkb(lockhash, sudt_id));
+  console.log("lock amount to crosschain: " + amount );
+  await waitForLockToLockscript()
+  await lockToCrosschainContract(amount);
+
   await waitForTx(config.lockToCrosschainTxHash);
-  await unlockCrosschainContract();
-  await waitForTx(config.unlockTxHash);
+  console.log("lockhash: " + lockhash, "  balance: "+ await getUdtAmountFromCkb(lockhash, sudt_id));
+
+  console.log("\nmuta balance: ");
+  await getUdtAmountFromMuta(sudt_id, relayerConfig.muta.address);
+
+  await waitForBurnSudt()
+
+  const burn_amount = 3;
+  await burnSudtToMuta(burn_amount);
+
+  console.log("burn sudt amount from muta to ckb: " + burn_amount);
+  console.log("waiting for burnSudtTx committed on muta")
   await delay(5000);
-  const tx = await ckb.rpc.getTransaction(config.unlockTxHash);
-  console.log(JSON.stringify(tx, null, 2));
+  console.log("\nmuta balance: ");
+  await getUdtAmountFromMuta(sudt_id, relayerConfig.muta.address);
+
+  console.log("lockhash: " + lockhash, "  balance: "+ await getUdtAmountFromCkb(lockhash, sudt_id));
 }
 
-main();
+module.exports = {main, burnSudtToMuta}
